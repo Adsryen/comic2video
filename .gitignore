@@ -1,0 +1,96 @@
+# Dependencies
+node_modules/
+.pnpm-store
+
+# Build output
+dist/
+dist-*
+*.local
+*.tsbuildinfo
+
+# Local environment variables
+.env.local
+
+# CRX signing key
+key.pem
+*.crx
+*.pem
+
+# IDE and OS files
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*~
+ehthumbs.db
+Thumbs.db
+.DS_Store
+
+# Logs
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Backup files
+javdb-backup_*.json
+
+# Markdown files
+*.md
+*av*.md
+# 排除特定文件夹的 md 文件
+!todo/*.md
+!scripts/*.md
+!tutorial/*.md
+!docs/*.md
+!docs/**/*.md
+!docs/.vitepress/
+!docs/.vitepress/**
+
+# 参考文档
+!reference/
+!reference/openai-115/
+!reference/openai-115/*.md
+!PRIVACY_POLICY.md
+!FEATURES.md
+
+# 测试文件
+**/__tests__/
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+*.mjs
+*.mts
+
+# Temp files
+temp/
+*debug*.html
+*test*.html
+*temp*.html
+*test*.js
+*temp*.js
+*debug*.js
+
+# 排除设置页面文件
+!src/dashboard/partials/tabs/settings-network-test.html
+
+# Build scripts
+build.bat
+
+# IDE specific
+.windsurf/
+.kiro/
+
+# codex
+.codex/
+.codex
+
+# plan
+plan/
+
+# reference
+reference/
