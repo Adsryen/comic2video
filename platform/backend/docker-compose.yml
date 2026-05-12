@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  # 1. The Message Broker
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: manhwa_rabbitmq
+    ports:
+      - "5672:5672"   # Main port for Celery
+      - "15672:15672" # GUI Dashboard (http://localhost:15672)
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+
+  # 2. The Result Backend
+  redis:
+    image: redis:alpine
+    container_name: manhwa_redis
+    ports:
+      - "6379:6379"

@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  # 1. The API Server
+  backend:
+    build: ./backend
+    container_name: manhwa_backend
+    ports:
+      - "8080:8080"
+    env_file:
+      - ./backend/.env
+    depends_on:
+      - redis
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+    # ⚡ NEW: Share the 'temp' folder with the container
+    # volumes:
+    #   - ./backend/temp:/app/temp
+
+  # 2. The Worker
+  worker:
+    build: ./backend
+    container_name: manhwa_worker
+    env_file:
+      - ./backend/.env
+    depends_on:
+      - redis
+    command: celery -A app.celery_worker worker --loglevel=info --concurrency=5
+    # ⚡ NEW: Share the SAME folder so Worker can see the PDF
+    # volumes:
+    #   - ./backend/temp:/app/temp
+
+  # 3. The Broker
+  redis:
+    image: "redis:alpine"
+    container_name: manhwa_redis
+    ports:
+      - "6379:6379"
