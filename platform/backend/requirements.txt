@@ -1,0 +1,41 @@
+# Core
+fastapi[all]
+uvicorn[standard]
+python-dotenv
+python-multipart
+edge-tts>=6.1.9
+sqlalchemy>=2.0
+
+# PDF & Image Processing
+pdf2image
+opencv-python-headless
+Pillow
+numpy
+
+# OCR
+pytesseract
+
+# AI/LLM
+google-generativeai
+google-cloud-pubsub
+groq
+
+# TTS
+gtts
+pydub
+
+# Storage
+supabase
+httpx
+celery[redis]
+pika
+redis
+
+# Utilities
+requests
+anyio
+
+# AWS Lambda Adapter 
+# mangum
+# awslambdaric
+# boto3
