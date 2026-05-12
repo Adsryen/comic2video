@@ -1,0 +1,33 @@
+# Environment / secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+.venv-linux/
+.venv-win/
+venv/
+env/
+
+# Logs
+.logs/
+logs/
+*.log
+
+# Runtime data
+storage/
+temp/
+tmp/
+tts_cache/
+*.pid
+*.db
+*.sqlite
+*.sqlite3

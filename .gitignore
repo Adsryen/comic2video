@@ -1,96 +1,69 @@
-# Dependencies
-node_modules/
-.pnpm-store
+# Local tooling
+.codex/
+.agents/
+.windsurf/
+.kiro/
 
-# Build output
-dist/
-dist-*
-*.local
-*.tsbuildinfo
+# Reference-only materials
+reference/
 
-# Local environment variables
-.env.local
-
-# CRX signing key
-key.pem
-*.crx
-*.pem
-
-# IDE and OS files
+# OS / editor
+.DS_Store
+ehthumbs.db
+Thumbs.db
 .idea/
 .vscode/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
+*.swp
+*.swo
 *~
-ehthumbs.db
-Thumbs.db
-.DS_Store
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.venv/
+.venv-*/
+venv/
+env/
+
+# Node / frontend
+node_modules/
+.pnpm-store/
+dist/
+build/
+*.tsbuildinfo
 
 # Logs
+.logs/
+logs/
+*.log
 npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Backup files
-javdb-backup_*.json
-
-# Markdown files
-*.md
-*av*.md
-# 排除特定文件夹的 md 文件
-!todo/*.md
-!scripts/*.md
-!tutorial/*.md
-!docs/*.md
-!docs/**/*.md
-!docs/.vitepress/
-!docs/.vitepress/**
-
-# 参考文档
-!reference/
-!reference/openai-115/
-!reference/openai-115/*.md
-!PRIVACY_POLICY.md
-!FEATURES.md
-
-# 测试文件
-**/__tests__/
-*.test.ts
-*.test.js
-*.spec.ts
-*.spec.js
-*.mjs
-*.mts
-
-# Temp files
+# Runtime / generated data
 temp/
-*debug*.html
-*test*.html
-*temp*.html
-*test*.js
-*temp*.js
-*debug*.js
-
-# 排除设置页面文件
-!src/dashboard/partials/tabs/settings-network-test.html
-
-# Build scripts
-build.bat
-
-# IDE specific
-.windsurf/
-.kiro/
-
-# codex
-.codex/
-.codex
-
-# plan
-plan/
-
-# reference
-reference/
+tmp/
+storage/
+tts_cache/
+*.pid
+*.sqlite
+*.sqlite3
+*.db
