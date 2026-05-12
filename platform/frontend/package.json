@@ -1,5 +1,5 @@
 {
-  "name": "manhwa-ai",
+  "name": "platform-frontend",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -52,7 +52,7 @@
     "globals": "^16.4.0",
     "vite": "^7.1.7"
   },
-  "description": "AI video",
+  "description": "Comic2Video Platform frontend demo and workspace",
   "main": "eslint.config.js",
   "author": "",
   "license": "ISC"

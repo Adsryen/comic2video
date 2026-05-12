@@ -5,6 +5,7 @@ import SystemStatusCard from '../components/platform/SystemStatusCard';
 import { usePlatformI18n } from '../components/platform/platformText';
 import { listProjects } from '../api/projects.js';
 import { getSystemHealth, getSystemModels } from '../api/assets.js';
+import { isDemoMode } from '../api/api.js';
 
 export default function Projects() {
   const { t } = usePlatformI18n();
@@ -46,6 +47,15 @@ export default function Projects() {
         <h1 className="text-4xl font-bold text-white">{t.projectsTitle}</h1>
         <p className="mt-2 max-w-3xl text-white/60">{t.projectsDescription}</p>
       </div>
+      {isDemoMode ? (
+        <div className="mb-8 rounded-2xl border border-cyan-400/30 bg-cyan-500/10 p-4 text-white">
+          <div className="mb-2 inline-flex rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-xs font-medium text-cyan-100">
+            {t.demoModeBadge}
+          </div>
+          <div className="text-lg font-semibold">{t.demoModeTitle}</div>
+          <p className="mt-2 text-sm text-white/70">{t.demoModeDescription}</p>
+        </div>
+      ) : null}
       <div className="mb-8">
         <SystemStatusCard health={health} models={models} />
       </div>

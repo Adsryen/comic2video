@@ -1,7 +1,5 @@
-import { assetUrl } from '../../api/api.js';
+import { assetHref } from '../../api/api.js';
 import { usePlatformI18n } from './platformText';
-
-const assetHref = (assetId) => assetUrl(`/api/v1/storage/${assetId}`);
 
 const groupAssets = (assets) => {
   const grouped = new Map();
@@ -28,17 +26,20 @@ export default function JobAssetsPanel({ assets }) {
             <div key={assetType} className="rounded-xl border border-white/10 bg-white/5 p-3">
               <div className="mb-2 text-sm font-medium text-white/90">{assetTypeLabel(assetType)} · {items.length}</div>
               <div className="grid gap-2">
-                {items.map((asset) => (
-                  <a
-                    key={asset.id}
-                    href={assetHref(asset.id)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm transition hover:bg-white/10"
-                  >
-                    {asset.mime_type} · {new Date(asset.created_at).toLocaleString()}
-                  </a>
-                ))}
+                {items.map((asset) => {
+                  const href = assetHref(asset);
+                  return (
+                    <a
+                      key={asset.id}
+                      href={href || '#'}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm transition hover:bg-white/10"
+                    >
+                      {asset.mime_type} · {new Date(asset.created_at).toLocaleString()}
+                    </a>
+                  );
+                })}
               </div>
             </div>
           ))}
