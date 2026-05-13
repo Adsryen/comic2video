@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  ocr_provider:
+    image: ${OCR_IMAGE}
+    container_name: ${OCR_CONTAINER_NAME}
+    restart: unless-stopped
+    ports:
+      - "${OCR_HOST_BIND}:${OCR_PORT}:8118"
+    environment:
+      TZ: ${TZ}
+    volumes:
+      - ${MODEL_DATA_ROOT}:${MODEL_DATA_ROOT}
+      - ${MODEL_LOG_ROOT}:${MODEL_LOG_ROOT}
+    working_dir: ${OCR_WORKDIR}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8118/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    command: >
+      bash -lc "echo 'Replace this command with your OCR provider startup command.' && sleep infinity"

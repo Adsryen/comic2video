@@ -14,9 +14,13 @@ $EnvExample = Join-Path $BackendDir '.env.example'
 $EnvFile = Join-Path $BackendDir '.env'
 $BackendLogDir = Join-Path $BackendDir '.logs'
 $FrontendLogDir = Join-Path $FrontendDir '.logs'
+$LocalComposeFile = Join-Path $RootDir 'compose/local-infra/rabbitmq-redis.compose.yml'
 $BackendPort = if ($env:BACKEND_PORT) { $env:BACKEND_PORT } else { '8000' }
 $FrontendPort = if ($env:FRONTEND_PORT) { $env:FRONTEND_PORT } else { '5173' }
 $CeleryConcurrency = if ($env:CELERY_CONCURRENCY) { $env:CELERY_CONCURRENCY } else { '1' }
+$BackendAuthEnabled = if ($env:BACKEND_AUTH_ENABLED) { $env:BACKEND_AUTH_ENABLED } else { 'false' }
+$BootstrapAdminEmails = if ($env:BOOTSTRAP_ADMIN_EMAILS) { $env:BOOTSTRAP_ADMIN_EMAILS } else { 'admin@example.com' }
+$DefaultNewUserRole = if ($env:DEFAULT_NEW_USER_ROLE) { $env:DEFAULT_NEW_USER_ROLE } else { 'member' }
 
 function Pause-OnError($Message) {
     Write-Host "`n[ERROR] $Message" -ForegroundColor Red
@@ -99,6 +103,64 @@ function Ensure-LogDirs {
     New-Item -ItemType Directory -Force -Path $FrontendLogDir | Out-Null
 }
 
+function Ensure-DockerCompose {
+    $docker = Get-Command docker -ErrorAction SilentlyContinue
+    if (-not $docker) {
+        throw 'Docker is required to start RabbitMQ/Redis locally. Install Docker first.'
+    }
+
+    & docker compose version *> $null
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Docker Compose v2 is required.'
+    }
+}
+
+function Test-TcpPort($HostName, $Port) {
+    try {
+        $client = [System.Net.Sockets.TcpClient]::new()
+        $async = $client.BeginConnect($HostName, [int]$Port, $null, $null)
+        if (-not $async.AsyncWaitHandle.WaitOne(1000, $false)) {
+            $client.Close()
+            return $false
+        }
+        $client.EndConnect($async)
+        $client.Close()
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Wait-ForPort($HostName, $Port, $Label, $TimeoutSeconds = 45) {
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-TcpPort $HostName $Port) {
+            return
+        }
+        Start-Sleep -Seconds 1
+    }
+
+    throw "Timed out waiting for $Label at $HostName`:$Port. Check Docker compose logs for compose/local-infra/rabbitmq-redis.compose.yml"
+}
+
+function Start-LocalInfra {
+    Ensure-DockerCompose
+    Write-Info 'Starting local RabbitMQ/Redis via docker compose'
+    Push-Location $BackendDir
+    try {
+        & docker compose -f $LocalComposeFile up -d
+        if ($LASTEXITCODE -ne 0) {
+            throw 'Failed to start local infrastructure via docker compose.'
+        }
+    }
+    finally {
+        Pop-Location
+    }
+
+    Wait-ForPort '127.0.0.1' 5672 'RabbitMQ' 45
+    Wait-ForPort '127.0.0.1' 6379 'Redis' 45
+}
+
 function Quote-ProcessArg($Value) {
     if ($null -eq $Value) {
         return '""'
@@ -164,10 +226,14 @@ try {
     Install-BackendDeps
     Install-FrontendDeps
     Ensure-LogDirs
+    Start-LocalInfra
 
     $venvPython = Get-VenvPython
     $backendEnv = @{
         'PYTHONPATH' = $BackendDir
+        'BACKEND_AUTH_ENABLED' = $BackendAuthEnabled
+        'BOOTSTRAP_ADMIN_EMAILS' = $BootstrapAdminEmails
+        'DEFAULT_NEW_USER_ROLE' = $DefaultNewUserRole
     }
 
     Write-Info 'Starting Celery worker'

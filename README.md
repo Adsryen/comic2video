@@ -60,6 +60,7 @@ Comic2Video Platform 是一个面向 **PDF / CBZ 漫画转视频** 场景的全�
 #### Linux / WSL
 
 ```bash
+docker compose -f compose/local-infra/rabbitmq-redis.compose.yml up -d
 bash setup-platform.sh
 bash start-platform.sh
 ```
@@ -67,6 +68,7 @@ bash start-platform.sh
 #### Windows PowerShell
 
 ```powershell
+docker compose -f compose/local-infra/rabbitmq-redis.compose.yml up -d
 .\start-platform.ps1
 ```
 
