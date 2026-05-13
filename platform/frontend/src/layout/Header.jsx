@@ -9,6 +9,8 @@ import {
   BookOpen,
   Home,
   User,
+  SlidersHorizontal,
+  Users,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import LocaleToggle from '../components/platform/LocaleToggle';
@@ -84,6 +86,8 @@ const Navbar = () => {
   const navLinks = [
     { name: t.navHome, path: '/', icon: Home },
     { name: t.navPlatform, path: '/projects', icon: FolderKanban },
+    { name: t.navModels, path: '/models', icon: SlidersHorizontal },
+    { name: t.navUsers, path: '/users', icon: Users },
     { name: t.navDocs, path: '/docs', icon: BookOpen },
     { name: t.navContact, path: '/contact', icon: Mail },
   ];

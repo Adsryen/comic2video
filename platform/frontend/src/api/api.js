@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 
 const explicitApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
 const explicitDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
@@ -25,6 +26,20 @@ export const isDemoMode = explicitDemoMode || !apiBaseUrl;
 
 const api = axios.create({
   baseURL: apiBaseUrl || undefined,
+});
+
+api.interceptors.request.use(async (config) => {
+  if (!isSupabaseConfigured) {
+    return config;
+  }
+
+  const { data } = await supabase.auth.getSession();
+  const accessToken = data?.session?.access_token;
+  if (accessToken) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${accessToken}`;
+  }
+  return config;
 });
 
 export const assetUrl = (pathOrUrl) => {

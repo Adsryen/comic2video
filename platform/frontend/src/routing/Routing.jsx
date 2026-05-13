@@ -7,6 +7,7 @@ import Navbar from "../layout/Header";
 import Footer from "../layout/Footer";
 import ScrollToTop from "../components/ScrollonTop";
 import DocumentationPage from "../pages/Documentation";
+import ModelConfigsPage from "../pages/ModelConfigs";
 
 
 import HomePage from "../pages/Home";
@@ -14,6 +15,7 @@ import UploadPage from "../pages/Upload";
 import ProjectsPage from "../pages/Projects";
 import ProjectDetailPage from "../pages/ProjectDetail";
 import JobDetailPage from "../pages/JobDetail";
+import UsersPage from "../pages/Users";
 import AuthCallback from "../components/auth/AuthCallback";
 import NotFoundPage from "../pages/NotFound";
 // Lazy-loaded pages
@@ -110,6 +112,24 @@ const Routing = () => {
           element={
             <Layout>
               <DocumentationPage />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/models"
+          element={
+            <Layout>
+              <ModelConfigsPage />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/users"
+          element={
+            <Layout>
+              <UsersPage />
             </Layout>
           }
         />

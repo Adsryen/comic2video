@@ -11,8 +11,21 @@ export default function SystemStatusCard({ health, models }) {
   const { t } = usePlatformI18n();
   const services = [
     [t.backend, health?.status === 'ok', health?.status || 'unknown'],
-    [t.ocr, models?.ocr?.available, models?.ocr?.detail || 'not detected'],
-    [t.tts, models?.tts?.available, models?.tts?.detail || 'not detected'],
+    [
+      t.ocr,
+      models?.ocr?.available,
+      `${models?.ocr?.detail || 'not detected'}${models?.ocr?.active_provider?.display_name ? ` · ${t.activeProvider}: ${models.ocr.active_provider.display_name}` : ''}`,
+    ],
+    [
+      t.script,
+      models?.script?.available,
+      `${models?.script?.detail || 'not detected'}${models?.script?.active_provider?.display_name ? ` · ${t.activeProvider}: ${models.script.active_provider.display_name}` : ''}`,
+    ],
+    [
+      t.tts,
+      models?.tts?.available,
+      `${models?.tts?.detail || 'not detected'}${models?.tts?.active_provider?.display_name ? ` · ${t.activeProvider}: ${models.tts.active_provider.display_name}` : ''}`,
+    ],
     [t.video, models?.video?.available, models?.video?.detail || 'not detected'],
     [t.ffmpeg, models?.ffmpeg?.available, models?.ffmpeg?.detail || 'not detected'],
   ];

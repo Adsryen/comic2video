@@ -359,8 +359,11 @@ export const getSystemHealthDemo = async () => ({
 });
 
 export const getSystemModelsDemo = async () => ({
-  ocr: { available: true, detail: 'Demo mode · replace with your OCR service' },
-  tts: { available: true, detail: 'Demo mode · replace with your TTS service' },
-  video: { available: true, detail: 'Demo mode · browser / placeholder assets' },
+  ocr: { available: true, detail: 'Demo mode · replace with your OCR service', active_provider: { display_name: 'OCR Provider A' } },
+  script: { available: true, detail: 'Demo mode · replace with your script model service', active_provider: { display_name: 'Script Provider A' } },
+  tts: { available: true, detail: 'Demo mode · replace with your TTS service', active_provider: { display_name: 'TTS Provider A' } },
+  video: { available: true, detail: 'Demo mode · browser / placeholder assets', active_provider: { display_name: 'Video Provider A' } },
   ffmpeg: { available: true, detail: 'Demo mode · simulated result output' },
+  storage: { available: true, detail: 'Demo mode local assets' },
+  supabase: { available: false, detail: 'Demo mode not configured' },
 });
