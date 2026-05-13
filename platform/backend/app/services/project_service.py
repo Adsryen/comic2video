@@ -5,8 +5,8 @@ from app.db.models import Asset, Job, Project
 
 class ProjectService:
     @staticmethod
-    def create(session: Session, name: str, source_type: str) -> Project:
-        project = Project(name=name, source_type=source_type, status="UPLOADED")
+    def create(session: Session, name: str, source_type: str, created_by_user_id: str | None = None) -> Project:
+        project = Project(name=name, source_type=source_type, status="UPLOADED", created_by_user_id=created_by_user_id)
         session.add(project)
         session.flush()
         return project

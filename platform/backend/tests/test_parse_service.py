@@ -58,6 +58,7 @@ def test_build_panel_manifest_from_cbz_images(tmp_path: Path):
     assert manifest["panel_items"][0]["page_index"] == 0
     assert manifest["panel_items"][1]["page_index"] == 1
     assert manifest["panel_items"][0]["storage_path"].endswith(".jpg")
+    assert "ocr_provider" in manifest["panel_items"][0]
 
 
 def test_build_panel_manifest_falls_back_to_placeholder_when_no_pages(tmp_path: Path):

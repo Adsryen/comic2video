@@ -8,6 +8,7 @@ class ProjectResponse(BaseModel):
     name: str
     source_type: str
     status: str
+    created_by_user_id: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

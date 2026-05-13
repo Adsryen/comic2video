@@ -27,13 +27,18 @@ except ImportError:
 try:
     from .utils.supabase_utils import supabase_upload
     from .utils.pdf_utils import extract_pdf_images_high_quality
-    from .utils.tts_utils import generate_narration_audio
+    from .utils.tts_utils import generate_narration_audio_with_provider
     from .utils.openai_utils import generate_cinematic_script
+    from .services.model_config_service import DEFAULT_PROVIDER_FALLBACKS, ModelConfigService
+    from .db.session import SessionLocal
 except ImportError:
     supabase_upload = None
     extract_pdf_images_high_quality = None
-    generate_narration_audio = None
+    generate_narration_audio_with_provider = None
     generate_cinematic_script = None
+    ModelConfigService = None
+    DEFAULT_PROVIDER_FALLBACKS = {}
+    SessionLocal = None
 
 # -------------------------------------------------------------------
 # 0. SETUP CLIENTS
@@ -96,6 +101,19 @@ def generate_visual_description_sync(image_bytes):
         print(f"❌ Groq Vision Error: {e}")
         return "Scene aage badhta hai..."
 
+
+def _resolve_provider(provider_type: str) -> dict:
+    if ModelConfigService is None or SessionLocal is None:
+        return DEFAULT_PROVIDER_FALLBACKS.get(provider_type, {"provider_key": provider_type})
+
+    session = SessionLocal()
+    try:
+        return ModelConfigService.resolve_active_provider(session, provider_type)
+    except Exception:
+        return DEFAULT_PROVIDER_FALLBACKS.get(provider_type, {"provider_key": provider_type})
+    finally:
+        session.close()
+
 # -------------------------------------------------------------------
 # 2. ASYNC LOGIC
 # -------------------------------------------------------------------
@@ -127,10 +145,18 @@ async def _process_task_async(task_id, manga_name, manga_genre, pdf_url):
         str_id = str(task_id)
         manga_folder = f"{manga_name.replace(' ', '_').lower()}_{str_id[:8]}"
         image_urls = await upload_images_parallel(image_bytes, manga_folder)
+        script_provider = _resolve_provider("script")
+        tts_provider = _resolve_provider("tts")
 
         # 4. Generate Script
         print("📝 Generating Script...")
-        llm_output = generate_cinematic_script(manga_name, manga_genre, "", image_bytes[:4])
+        llm_output = generate_cinematic_script(
+            manga_name,
+            manga_genre,
+            "",
+            image_bytes[:4],
+            provider_config=script_provider,
+        )
         scenes = llm_output.get("scenes", [])
 
         # 5. Backfill Scenes
@@ -153,7 +179,7 @@ async def _process_task_async(task_id, manga_name, manga_genre, pdf_url):
         for sc in scenes:
             text = sc.get("narration_segment", "").strip()
             if text:
-                path, dur = await generate_narration_audio(text) 
+                path, dur = await generate_narration_audio_with_provider(text, tts_provider)
                 merged_audio += AudioSegment.from_mp3(path)
             else:
                 dur = 2.0
@@ -174,6 +200,8 @@ async def _process_task_async(task_id, manga_name, manga_genre, pdf_url):
             "task_id": task_id,
             "status": "SUCCESS",
             "manga_name": manga_name,
+            "script_provider": script_provider,
+            "tts_provider": tts_provider,
             "image_urls": image_urls,
             "audio_url": audio_url,
             "final_video_segments": final_scenes,

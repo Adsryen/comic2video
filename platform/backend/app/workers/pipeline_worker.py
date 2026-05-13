@@ -7,9 +7,11 @@ from app.config import BASE_DIR
 from app.db.models import Asset, Job, JobStep, Project, Storyboard
 from app.db.session import SessionLocal
 from app.services.audio_service import AudioService
+from app.services.model_config_service import ModelConfigService
 from app.services.parse_service import ParseService
 from app.services.render_service import RenderService
 from app.services.storyboard_service import StoryboardService
+from app.utils.openai_utils import generate_cinematic_script
 from app.workers.step_runner import StepRunner
 
 
@@ -85,13 +87,48 @@ def _build_storyboard_output(context: dict) -> dict:
     }
 
 
-def _build_script_output(context: dict, job: Job, project: Project) -> dict:
+def _load_panel_bytes(panel_items: list[dict], limit: int = 4) -> list[bytes]:
+    image_bytes = []
+    for panel in panel_items[:limit]:
+        storage_path = panel.get("storage_path")
+        if not storage_path:
+            continue
+        path = Path(storage_path)
+        if not path.exists():
+            continue
+        try:
+            image_bytes.append(path.read_bytes())
+        except OSError:
+            continue
+    return image_bytes
+
+
+def _build_script_output(db, context: dict, job: Job, project: Project) -> dict:
+    parse_output = context.get("parse", {})
     storyboard_output = context.get("storyboard", {})
+    panel_items = parse_output.get("panel_items", [])
     scenes = storyboard_output.get("storyboard", {}).get("scenes", [])
+    ocr_data = "\n".join(item.get("ocr_text", "") for item in panel_items if item.get("ocr_text"))
+    provider = ModelConfigService.resolve_active_provider(db, "script")
+    llm_output = generate_cinematic_script(
+        manga_name=project.name,
+        manga_genre=job.mode,
+        ocr_data=ocr_data,
+        image_bytes_list=_load_panel_bytes(panel_items),
+        provider_config=provider,
+        storyboard_scenes=scenes,
+    )
+    generated_scenes = llm_output.get("scenes", []) if isinstance(llm_output, dict) else []
+
     segments = [
         {
             "scene_index": scene["scene_index"],
-            "text": scene.get("narration_text") or scene.get("subtitle_text") or f"Scene {scene['scene_index'] + 1}",
+            "text": (
+                (generated_scenes[scene["scene_index"]].get("narration_segment") if scene["scene_index"] < len(generated_scenes) else None)
+                or scene.get("narration_text")
+                or scene.get("subtitle_text")
+                or f"Scene {scene['scene_index'] + 1}"
+            ),
         }
         for scene in scenes
     ]
@@ -99,6 +136,8 @@ def _build_script_output(context: dict, job: Job, project: Project) -> dict:
         "step": "script",
         "job_id": job.id,
         "project_id": project.id,
+        "provider": provider,
+        "raw_output": llm_output,
         "segments": segments,
         "narration": " ".join(segment["text"] for segment in segments),
     }
@@ -116,13 +155,52 @@ def _build_tts_output(context: dict, job: Job, project: Project) -> dict:
     }
 
 
+def _video_render_options(provider: dict, job: Job) -> dict:
+    options = {}
+    raw = provider.get("config_json") if provider else None
+    if raw:
+        try:
+            options = json.loads(raw) if isinstance(raw, str) else dict(raw)
+        except (TypeError, json.JSONDecodeError):
+            options = {}
+
+    width = int(options.get("width", 1280))
+    height = int(options.get("height", 720))
+    fps = int(options.get("fps", 24))
+    seconds_per_panel = float(options.get("seconds_per_panel", options.get("scene_duration", 2.0)))
+    background_rgb = tuple(options.get("background_rgb", [10, 10, 14]))
+
+    return {
+        "fps": fps,
+        "frame_size": (width, height),
+        "seconds_per_panel": seconds_per_panel,
+        "background_rgb": background_rgb,
+        "provider_key": provider.get("provider_key") if provider else "video_local",
+        "mode": job.mode,
+    }
+
+
+def _resolve_video_provider() -> dict:
+    session = SessionLocal()
+    try:
+        return ModelConfigService.resolve_active_provider(session, "video")
+    finally:
+        session.close()
+
+
 def _build_video_output(context: dict, job: Job, project: Project) -> dict:
     parse_output = context.get("parse", {})
     panel_items = parse_output.get("panel_items", [])
     video_path = _storage_root() / "projects" / project.id / "jobs" / job.id / "slideshow.mp4"
+    provider = _resolve_video_provider()
+    render_options = _video_render_options(provider, job)
     render_result = RenderService.render_slideshow(
         [panel["storage_path"] for panel in panel_items],
         str(video_path),
+        seconds_per_panel=render_options["seconds_per_panel"],
+        fps=render_options["fps"],
+        frame_size=render_options["frame_size"],
+        background_rgb=render_options["background_rgb"],
     )
     return {
         "step": "video",
@@ -131,6 +209,14 @@ def _build_video_output(context: dict, job: Job, project: Project) -> dict:
         "video_url": str(video_path),
         "scene_count": len(panel_items),
         "status": "rendered",
+        "provider": provider,
+        "render_options": {
+            "fps": render_options["fps"],
+            "width": render_options["frame_size"][0],
+            "height": render_options["frame_size"][1],
+            "seconds_per_panel": render_options["seconds_per_panel"],
+            "background_rgb": list(render_options["background_rgb"]),
+        },
         **render_result,
     }
 
@@ -162,7 +248,7 @@ def _step_output(step_name: str, db, project: Project, job: Job, context: dict) 
     if step_name == "storyboard":
         return _build_storyboard_output(context)
     if step_name == "script":
-        return _build_script_output(context, job, project)
+        return _build_script_output(db, context, job, project)
     if step_name == "tts":
         return _build_tts_output(context, job, project)
     if step_name == "video":

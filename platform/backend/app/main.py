@@ -15,6 +15,9 @@ from app.routers.projects import router as projects_router
 from app.routers.jobs import router as jobs_router
 from app.routers.assets import router as assets_router
 from app.routers.system import router as system_router
+from app.routers.admin_model_configs import router as admin_model_configs_router
+from app.routers.auth import router as auth_router
+from app.routers.users import router as users_router
 
 import app.db.models  # noqa: F401
 
@@ -37,6 +40,9 @@ app.include_router(projects_router)
 app.include_router(jobs_router)
 app.include_router(assets_router)
 app.include_router(system_router)
+app.include_router(admin_model_configs_router)
+app.include_router(auth_router)
+app.include_router(users_router)
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")

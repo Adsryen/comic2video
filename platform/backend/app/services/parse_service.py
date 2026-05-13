@@ -5,11 +5,21 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
+from app.db.session import SessionLocal
+from app.services.model_config_service import ModelConfigService
 from app.utils.pdf_utils import extract_pdf_images_high_quality
 from app.utils.vision_utils import detect_language, ocr_image_bytes
 
 
 class ParseService:
+    @staticmethod
+    def _resolve_ocr_provider() -> dict:
+        session = SessionLocal()
+        try:
+            return ModelConfigService.resolve_active_provider(session, "ocr")
+        finally:
+            session.close()
+
     @staticmethod
     def detect_source_type(source_path: str) -> str:
         suffix = Path(source_path).suffix.lower()
@@ -107,7 +117,8 @@ class ParseService:
         normalized.save(storage_path, format="JPEG", quality=92)
 
         image_bytes = ParseService._image_to_bytes(normalized)
-        ocr_text = ocr_image_bytes(image_bytes)
+        ocr_provider = ParseService._resolve_ocr_provider()
+        ocr_text = ocr_image_bytes(image_bytes, provider_config=ocr_provider)
         width, height = normalized.size
         panel_id = f"page-{page_index:04d}-panel-{panel_index:04d}"
 
@@ -119,6 +130,7 @@ class ParseService:
             "mime_type": "image/jpeg",
             "width": width,
             "height": height,
+            "ocr_provider": ocr_provider.get("provider_key"),
             "ocr_text": ocr_text,
             "scene_description": scene_description or f"Page {page_index + 1} panel {panel_index + 1}",
             "importance_score": 0.5,

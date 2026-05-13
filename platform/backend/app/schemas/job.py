@@ -13,6 +13,7 @@ class JobCreateRequest(BaseModel):
 class JobResponse(BaseModel):
     id: str
     project_id: str
+    created_by_user_id: str | None = None
     mode: str
     language: str | None = None
     voice: str | None = None

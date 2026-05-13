@@ -111,7 +111,10 @@ def test_models_endpoint_returns_backend_availability_shape():
     response = client.get("/api/v1/models")
     assert response.status_code == 200
     payload = response.json()
-    assert set(payload.keys()) == {"ocr", "vision", "tts", "video"}
+    assert {"ocr", "script", "vision", "tts", "video", "ffmpeg", "storage", "supabase"}.issubset(payload.keys())
+    assert "active_provider" in payload["ocr"]
+    assert "active_provider" in payload["script"]
+    assert "active_provider" in payload["tts"]
 
 
 def test_get_job_result_returns_final_video_mp4():
@@ -190,6 +193,133 @@ def test_get_job_assets_returns_generated_artifacts():
     payload = response.json()
     assert len(payload) >= 1
     assert all(asset["job_id"] == job["id"] for asset in payload)
+
+
+def test_script_artifact_includes_provider_metadata():
+    provider_response = client.post(
+        "/api/v1/admin/model-providers",
+        json={
+            "provider_type": "script",
+            "provider_key": "openai_compatible",
+            "display_name": "Script Provider A",
+            "base_url": "http://localhost:8001/v1",
+            "model_name": "script-provider-model",
+            "is_enabled": True,
+            "is_default": True,
+            "config_json": '{"temperature": 0.2}',
+        },
+    )
+    assert provider_response.status_code == 201
+
+    project_id = _create_project()
+    job = client.post(
+        f"/api/v1/projects/{project_id}/jobs",
+        json={"mode": "basic", "language": "zh", "voice": "default", "subtitle_enabled": True},
+    ).json()
+
+    assets = client.get(f"/api/v1/jobs/{job['id']}/assets").json()
+    script_asset = next(asset for asset in assets if asset["asset_type"] == "script_artifact")
+
+    response = client.get(f"/api/v1/storage/{script_asset['id']}")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["provider"]["provider_key"] == "openai_compatible"
+    assert payload["provider"]["display_name"] == "Script Provider A"
+
+
+def test_parse_artifact_records_active_ocr_provider():
+    provider_response = client.post(
+        "/api/v1/admin/model-providers",
+        json={
+            "provider_type": "ocr",
+            "provider_key": "paddleocr",
+            "display_name": "OCR Provider A",
+            "base_url": "http://localhost:8118",
+            "model_name": "ocr-provider-model",
+            "is_enabled": True,
+            "is_default": True,
+            "config_json": '{"ocr_endpoint": "/ocr", "timeout_seconds": 1}',
+        },
+    )
+    assert provider_response.status_code == 201
+
+    project_id = _create_project()
+    job = client.post(
+        f"/api/v1/projects/{project_id}/jobs",
+        json={"mode": "basic", "language": "zh", "voice": "default", "subtitle_enabled": True},
+    ).json()
+
+    assets = client.get(f"/api/v1/jobs/{job['id']}/assets").json()
+    parse_asset = next(asset for asset in assets if asset["asset_type"] == "parse_artifact")
+
+    response = client.get(f"/api/v1/storage/{parse_asset['id']}")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["panel_items"][0]["ocr_provider"] == "paddleocr"
+
+
+def test_tts_artifact_includes_provider_metadata():
+    provider_response = client.post(
+        "/api/v1/admin/model-providers",
+        json={
+            "provider_type": "tts",
+            "provider_key": "tts_local",
+            "display_name": "TTS Provider A",
+            "model_name": "hi-IN-MadhurNeural",
+            "is_enabled": True,
+            "is_default": True,
+            "config_json": '{"voice": "hi-IN-MadhurNeural"}',
+        },
+    )
+    assert provider_response.status_code == 201
+
+    project_id = _create_project()
+    job = client.post(
+        f"/api/v1/projects/{project_id}/jobs",
+        json={"mode": "basic", "language": "zh", "voice": "default", "subtitle_enabled": True},
+    ).json()
+
+    assets = client.get(f"/api/v1/jobs/{job['id']}/assets").json()
+    tts_asset = next(asset for asset in assets if asset["asset_type"] == "tts_artifact")
+
+    response = client.get(f"/api/v1/storage/{tts_asset['id']}")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["provider"]["provider_key"] == "tts_local"
+    assert payload["provider"]["display_name"] == "TTS Provider A"
+
+
+def test_video_artifact_includes_render_options_and_provider_metadata():
+    provider_response = client.post(
+        "/api/v1/admin/model-providers",
+        json={
+            "provider_type": "video",
+            "provider_key": "video_local",
+            "display_name": "Video Provider A",
+            "model_name": "slideshow-renderer",
+            "is_enabled": True,
+            "is_default": True,
+            "config_json": '{"fps": 12, "width": 640, "height": 360, "seconds_per_panel": 1.5}',
+        },
+    )
+    assert provider_response.status_code == 201
+
+    project_id = _create_project()
+    job = client.post(
+        f"/api/v1/projects/{project_id}/jobs",
+        json={"mode": "basic", "language": "zh", "voice": "default", "subtitle_enabled": True},
+    ).json()
+
+    assets = client.get(f"/api/v1/jobs/{job['id']}/assets").json()
+    video_asset = next(asset for asset in assets if asset["asset_type"] == "video_artifact_meta")
+
+    response = client.get(f"/api/v1/storage/{video_asset['id']}")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["provider"]["provider_key"] == "video_local"
+    assert payload["render_options"]["fps"] == 12
+    assert payload["render_options"]["width"] == 640
+    assert payload["render_options"]["height"] == 360
 
 
 def test_storage_endpoint_serves_job_asset_file():

@@ -18,10 +18,11 @@ class IngestService:
         filename: str,
         content_type: str | None,
         content: bytes,
+        created_by_user_id: str | None = None,
     ) -> Project:
         extension = os.path.splitext(filename)[1].lower()
         source_type = "cbz" if extension == ".cbz" else "pdf"
-        project = ProjectService.create(session, name=name, source_type=source_type)
+        project = ProjectService.create(session, name=name, source_type=source_type, created_by_user_id=created_by_user_id)
 
         storage_path = self.storage.save_bytes(
             f"projects/{project.id}/source{extension}",

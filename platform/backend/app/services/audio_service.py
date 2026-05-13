@@ -10,7 +10,9 @@ try:
 except ImportError:
     AudioSegment = None
 
-from app.utils.tts_utils import generate_narration_audio
+from app.db.session import SessionLocal
+from app.services.model_config_service import ModelConfigService
+from app.utils.tts_utils import generate_narration_audio_with_provider
 
 
 class AudioService:
@@ -24,6 +26,8 @@ class AudioService:
             duration = AudioService._write_silent_wav(audio_path, max(len(segments) * 2, 1))
             return {"audio_path": str(audio_path), "duration": duration, "voice_mode": "silent_fallback", "segment_count": len(segments)}
 
+        provider = AudioService._resolve_tts_provider()
+
         merged_audio = AudioSegment.empty()
         timeline = 0.0
         enriched_segments = []
@@ -31,7 +35,7 @@ class AudioService:
         for segment in segments:
             text = (segment.get("text") or "").strip()
             if text:
-                audio_file, duration = AudioService._generate_segment_audio(text, destination_dir)
+                audio_file, duration = AudioService._generate_segment_audio(text, destination_dir, provider)
                 try:
                     clip = AudioSegment.from_file(audio_file)
                 except Exception:
@@ -52,7 +56,8 @@ class AudioService:
             return {
                 "audio_path": str(audio_path),
                 "duration": round(timeline, 2),
-                "voice_mode": "tts_or_silence_mix",
+                "voice_mode": provider.get("provider_key") or "tts_or_silence_mix",
+                "provider": provider,
                 "segment_count": len(enriched_segments),
                 "segments": enriched_segments,
             }
@@ -62,9 +67,18 @@ class AudioService:
                 "audio_path": str(audio_path),
                 "duration": duration,
                 "voice_mode": "wav_silent_fallback",
+                "provider": provider,
                 "segment_count": len(enriched_segments),
                 "segments": enriched_segments,
             }
+
+    @staticmethod
+    def _resolve_tts_provider() -> dict:
+        session = SessionLocal()
+        try:
+            return ModelConfigService.resolve_active_provider(session, "tts")
+        finally:
+            session.close()
 
     @staticmethod
     def merge_audio_with_video(video_path: str, audio_path: str, output_path: str) -> dict:
@@ -96,9 +110,9 @@ class AudioService:
         return {"video_path": str(destination), "audio_path": audio_path, "muxed": False}
 
     @staticmethod
-    def _generate_segment_audio(text: str, destination_dir: Path) -> tuple[str, float]:
+    def _generate_segment_audio(text: str, destination_dir: Path, provider: dict) -> tuple[str, float]:
         try:
-            return asyncio.run(generate_narration_audio(text))
+            return asyncio.run(generate_narration_audio_with_provider(text, provider))
         except Exception:
             fallback = destination_dir / f"segment-{abs(hash(text))}.wav"
             duration = AudioService._write_silent_wav(fallback, 2)
