@@ -67,3 +67,5 @@ tts_cache/
 *.sqlite
 *.sqlite3
 *.db
+.agents/
+docs/
