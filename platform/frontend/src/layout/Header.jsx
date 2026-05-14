@@ -113,7 +113,7 @@ const Navbar = () => {
                 alt="Platform Logo"
                 className="h-8 w-8 sm:h-10 sm:w-10 object-contain animate-spin"
               />
-              <span className="hidden sm:inline">PLATFORM</span>
+              <span className="hidden sm:inline">{t.brandName}</span>
             </Link>
 
             <div className="hidden lg:flex items-center gap-8">
@@ -180,7 +180,7 @@ const Navbar = () => {
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-2">
                 <img src="/manhwa-logo.png" className="w-10 h-10" alt="Logo" />
-                <span className="font-bold text-white">PLATFORM</span>
+                <span className="font-bold text-white">{t.brandName}</span>
               </div>
               <div className="flex items-center gap-3">
                 <LocaleToggle />

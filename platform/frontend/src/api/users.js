@@ -3,7 +3,7 @@ import api, { isDemoMode } from './api.js';
 let demoUsers = [
   {
     id: 'demo-user-1',
-    external_auth_id: 'supabase-user-1',
+    external_auth_id: 'local-user-1',
     email: 'admin@example.com',
     display_name: 'Admin User',
     auth_provider: 'email',
@@ -13,7 +13,7 @@ let demoUsers = [
   },
   {
     id: 'demo-user-2',
-    external_auth_id: 'supabase-user-2',
+    external_auth_id: 'local-user-2',
     email: 'member@example.com',
     display_name: 'Member User',
     auth_provider: 'google',
