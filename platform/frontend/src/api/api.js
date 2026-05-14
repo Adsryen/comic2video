@@ -1,8 +1,8 @@
 import axios from 'axios';
-import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 
 const explicitApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
 const explicitDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
+const ACCESS_TOKEN_KEY = 'platform_access_token';
 
 const detectDefaultApiBaseUrl = () => {
   if (explicitApiBaseUrl) {
@@ -18,7 +18,7 @@ const detectDefaultApiBaseUrl = () => {
     return 'http://localhost:8000';
   }
 
-  return '';
+  return `${window.location.protocol}//${host}:8000`;
 };
 
 export const apiBaseUrl = detectDefaultApiBaseUrl();
@@ -26,15 +26,15 @@ export const isDemoMode = explicitDemoMode || !apiBaseUrl;
 
 const api = axios.create({
   baseURL: apiBaseUrl || undefined,
+  withCredentials: true,
 });
 
-api.interceptors.request.use(async (config) => {
-  if (!isSupabaseConfigured) {
+api.interceptors.request.use((config) => {
+  if (typeof window === 'undefined') {
     return config;
   }
 
-  const { data } = await supabase.auth.getSession();
-  const accessToken = data?.session?.access_token;
+  const accessToken = window.localStorage.getItem(ACCESS_TOKEN_KEY);
   if (accessToken) {
     config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${accessToken}`;

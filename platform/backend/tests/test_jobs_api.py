@@ -1,65 +1,30 @@
 import os
 import tempfile
 
-os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
-os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-key")
-os.environ.setdefault("SUPABASE_BUCKET_NAME", "test-bucket")
-os.environ.setdefault("SUPABASE_BUCKET", "test-bucket")
+import pytest
+
 os.environ.setdefault("RABBITMQ_URL", "memory://")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("GROQ_API_KEY", "test-key")
+os.environ["AUTH_MODE"] = "disabled"
+os.environ["STORAGE_PROVIDER"] = "local"
 _temp_dir = tempfile.mkdtemp(prefix="platform_jobs_")
 os.environ.setdefault("DATABASE_URL", f"sqlite:///{os.path.join(_temp_dir, 'test.db')}")
 os.environ.setdefault("STORAGE_ROOT", os.path.join(_temp_dir, "storage"))
 
-import supabase
 
-
-class _DummyStorageBucket:
-    def upload(self, *args, **kwargs):
-        return {"ok": True}
-
-    def get_public_url(self, path):
-        return f"https://example.supabase.co/storage/v1/object/public/test-bucket/{path}"
-
-
-class _DummyStorage:
-    def from_(self, *args, **kwargs):
-        return _DummyStorageBucket()
-
-
-class _DummyTableQuery:
-    data = []
-
-    def insert(self, *args, **kwargs):
-        return self
-
-    def update(self, *args, **kwargs):
-        return self
-
-    def select(self, *args, **kwargs):
-        return self
-
-    def eq(self, *args, **kwargs):
-        return self
-
-    def execute(self):
-        return self
-
-
-class _DummySupabaseClient:
-    storage = _DummyStorage()
-
-    def table(self, *args, **kwargs):
-        return _DummyTableQuery()
-
-
-supabase.create_client = lambda *args, **kwargs: _DummySupabaseClient()
 
 from fastapi.testclient import TestClient
 from app.main import app
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _configure_env():
+    os.environ["AUTH_MODE"] = "disabled"
+    os.environ["STORAGE_PROVIDER"] = "local"
+    os.environ["STORAGE_ROOT"] = os.path.join(_temp_dir, "storage")
 
 
 def _create_project():
@@ -111,7 +76,7 @@ def test_models_endpoint_returns_backend_availability_shape():
     response = client.get("/api/v1/models")
     assert response.status_code == 200
     payload = response.json()
-    assert {"ocr", "script", "vision", "tts", "video", "ffmpeg", "storage", "supabase"}.issubset(payload.keys())
+    assert {"ocr", "script", "vision", "tts", "video", "ffmpeg", "storage", "auth"}.issubset(payload.keys())
     assert "active_provider" in payload["ocr"]
     assert "active_provider" in payload["script"]
     assert "active_provider" in payload["tts"]
@@ -335,3 +300,14 @@ def test_storage_endpoint_serves_job_asset_file():
     response = client.get(f"/api/v1/storage/{storyboard_asset['id']}")
     assert response.status_code == 200
     assert response.content
+
+
+def test_generated_assets_store_object_keys():
+    project_id = _create_project()
+    job = client.post(
+        f"/api/v1/projects/{project_id}/jobs",
+        json={"mode": "basic", "language": "zh", "voice": "default", "subtitle_enabled": True},
+    ).json()
+
+    assets = client.get(f"/api/v1/jobs/{job['id']}/assets").json()
+    assert any(asset["storage_path"].startswith("jobs/") or asset["storage_path"].startswith("projects/") for asset in assets)

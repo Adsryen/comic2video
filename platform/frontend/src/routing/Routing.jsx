@@ -2,33 +2,25 @@
 import React, { Suspense, lazy } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
 
-// Layout components
 import Navbar from "../layout/Header";
 import Footer from "../layout/Footer";
 import ScrollToTop from "../components/ScrollonTop";
 import DocumentationPage from "../pages/Documentation";
 import ModelConfigsPage from "../pages/ModelConfigs";
-
-
 import HomePage from "../pages/Home";
 import UploadPage from "../pages/Upload";
 import ProjectsPage from "../pages/Projects";
 import ProjectDetailPage from "../pages/ProjectDetail";
 import JobDetailPage from "../pages/JobDetail";
 import UsersPage from "../pages/Users";
-import AuthCallback from "../components/auth/AuthCallback";
 import NotFoundPage from "../pages/NotFound";
-// Lazy-loaded pages
-const ContactPage = lazy(() => import("../pages/Contact"));
 
+const ContactPage = lazy(() => import("../pages/Contact"));
 const LoginPage = lazy(() => import("../pages/Login"));
 
-// Layout Wrapper
 const Layout = ({ children }) => {
   const location = useLocation();
-
-  // CHANGED: Added /auth/callback to hide layout routes
-  const hideLayoutRoutes = ["/login", "/signup", "/auth/callback"];
+  const hideLayoutRoutes = ["/login", "/signup"];
   const hideLayout = hideLayoutRoutes.includes(location.pathname);
 
   return (
@@ -46,7 +38,6 @@ const Routing = () => {
       <ScrollToTop />
 
       <Routes>
-        {/* HOME — NO SUSPENSE */}
         <Route
           path="/"
           element={
@@ -55,8 +46,6 @@ const Routing = () => {
             </Layout>
           }
         />
-
-        {/* OTHER PAGES — SUSPENSE OK */}
 
         <Route
           path="/projects"
@@ -143,10 +132,6 @@ const Routing = () => {
           }
         />
 
-        {/* AUTH CALLBACK - No Layout */}
-        <Route path="/auth/callback" element={<AuthCallback />} />
-
-        {/* 404 - CATCH ALL */}
         <Route
           path="*"
           element={

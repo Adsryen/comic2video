@@ -2,14 +2,14 @@ import os
 
 from sqlalchemy.orm import Session
 
-from app.adapters.storage_adapter import LocalStorageAdapter
 from app.db.models import Asset, Project
+from app.services.storage_service import StorageService
 from app.services.project_service import ProjectService
 
 
 class IngestService:
     def __init__(self, storage_root: str):
-        self.storage = LocalStorageAdapter(storage_root)
+        self.storage = StorageService(storage_root=storage_root)
 
     def create_project_with_upload(
         self,
@@ -24,9 +24,11 @@ class IngestService:
         source_type = "cbz" if extension == ".cbz" else "pdf"
         project = ProjectService.create(session, name=name, source_type=source_type, created_by_user_id=created_by_user_id)
 
-        storage_path = self.storage.save_bytes(
-            f"projects/{project.id}/source{extension}",
+        object_key = f"projects/{project.id}/source{extension}"
+        storage_path = self.storage.put_bytes(
+            object_key,
             content,
+            content_type or "application/octet-stream",
         )
 
         asset = Asset(

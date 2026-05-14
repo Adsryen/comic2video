@@ -365,5 +365,4 @@ export const getSystemModelsDemo = async () => ({
   video: { available: true, detail: 'Demo mode · browser / placeholder assets', active_provider: { display_name: 'Video Provider A' } },
   ffmpeg: { available: true, detail: 'Demo mode · simulated result output' },
   storage: { available: true, detail: 'Demo mode local assets' },
-  supabase: { available: false, detail: 'Demo mode not configured' },
 });

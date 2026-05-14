@@ -11,6 +11,7 @@ from app.services.model_config_service import ModelConfigService
 from app.services.parse_service import ParseService
 from app.services.render_service import RenderService
 from app.services.storyboard_service import StoryboardService
+from app.services.storage_service import StorageService
 from app.utils.openai_utils import generate_cinematic_script
 from app.workers.step_runner import StepRunner
 
@@ -22,11 +23,17 @@ def _storage_root() -> Path:
     return path
 
 
-def _write_json(relative_path: str, payload: dict) -> str:
-    destination = _storage_root() / relative_path
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    return str(destination)
+def _storage_service() -> StorageService:
+    return StorageService(storage_root=os.getenv("STORAGE_ROOT", os.path.join(BASE_DIR, "storage")))
+
+
+def _write_json(object_key: str, payload: dict) -> str:
+    _storage_service().put_bytes(
+        object_key,
+        json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"),
+        "application/json",
+    )
+    return object_key
 
 
 def _get_source_asset(db, project: Project):
@@ -45,12 +52,20 @@ def _get_source_asset(db, project: Project):
 def _build_parse_output(db, project: Project, job: Job) -> dict:
     source_asset = _get_source_asset(db, project)
     source_path = source_asset.storage_path if source_asset else ""
+    source_file_path = _storage_root() / source_path if source_path else None
     work_dir = _storage_root() / "projects" / project.id / "jobs" / job.id / "parse"
     extracted_dir = work_dir / "extracted"
     panels_dir = work_dir / "panels"
 
-    page_items = ParseService.extract_pages(source_path, str(extracted_dir)) if source_path else []
+    page_items = ParseService.extract_pages(str(source_file_path), str(extracted_dir)) if source_file_path else []
     manifest = ParseService.build_panel_manifest(page_items, panels_dir)
+    storage = _storage_service()
+    for panel in manifest.get("panel_items", []):
+        local_panel_path = Path(panel["storage_path"])
+        object_key = f"jobs/{job.id}/panels/{local_panel_path.name}"
+        storage.put_bytes(object_key, local_panel_path.read_bytes(), panel.get("mime_type", "image/jpeg"))
+        panel["local_path"] = str(local_panel_path)
+        panel["storage_path"] = object_key
     manifest.update(
         {
             "step": "parse",
@@ -93,12 +108,15 @@ def _load_panel_bytes(panel_items: list[dict], limit: int = 4) -> list[bytes]:
         storage_path = panel.get("storage_path")
         if not storage_path:
             continue
-        path = Path(storage_path)
-        if not path.exists():
-            continue
         try:
-            image_bytes.append(path.read_bytes())
+            local_path = Path(storage_path)
+            if local_path.exists():
+                image_bytes.append(local_path.read_bytes())
+                continue
+            image_bytes.append(_storage_service().get_bytes(storage_path))
         except OSError:
+            continue
+        except Exception:
             continue
     return image_bytes
 
@@ -194,19 +212,29 @@ def _build_video_output(context: dict, job: Job, project: Project) -> dict:
     video_path = _storage_root() / "projects" / project.id / "jobs" / job.id / "slideshow.mp4"
     provider = _resolve_video_provider()
     render_options = _video_render_options(provider, job)
+    panel_paths = [panel.get("local_path") or panel["storage_path"] for panel in panel_items]
     render_result = RenderService.render_slideshow(
-        [panel["storage_path"] for panel in panel_items],
+        panel_paths,
         str(video_path),
         seconds_per_panel=render_options["seconds_per_panel"],
         fps=render_options["fps"],
         frame_size=render_options["frame_size"],
         background_rgb=render_options["background_rgb"],
     )
+    object_key = f"jobs/{job.id}/video/slideshow.mp4"
+    _storage_service().put_bytes(object_key, Path(video_path).read_bytes(), "video/mp4")
+    render_metadata = {
+        key: value
+        for key, value in render_result.items()
+        if key not in {"video_path", "fps", "width", "height", "seconds_per_panel", "background_rgb"}
+    }
     return {
         "step": "video",
         "job_id": job.id,
         "project_id": project.id,
-        "video_url": str(video_path),
+        "video_url": object_key,
+        "video_path": str(video_path),
+        "video_storage_path": object_key,
         "scene_count": len(panel_items),
         "status": "rendered",
         "provider": provider,
@@ -217,7 +245,7 @@ def _build_video_output(context: dict, job: Job, project: Project) -> dict:
             "seconds_per_panel": render_options["seconds_per_panel"],
             "background_rgb": list(render_options["background_rgb"]),
         },
-        **render_result,
+        **render_metadata,
     }
 
 
@@ -230,12 +258,21 @@ def _build_merge_output(context: dict, job: Job, project: Project) -> dict:
         tts_output["audio_path"],
         str(final_path),
     )
+    final_video_key = f"jobs/{job.id}/video/final_video.mp4"
+    final_audio_key = f"jobs/{job.id}/audio/final_audio.wav"
+    _storage_service().put_bytes(final_video_key, Path(merge_result["video_path"]).read_bytes(), "video/mp4")
+    if Path(merge_result["audio_path"]).exists():
+        _storage_service().put_bytes(final_audio_key, Path(merge_result["audio_path"]).read_bytes(), "audio/wav")
     return {
         "step": "merge",
         "job_id": job.id,
         "project_id": project.id,
-        "video_url": merge_result["video_path"],
-        "audio_url": merge_result["audio_path"],
+        "video_url": final_video_key,
+        "video_path": str(final_path),
+        "video_storage_path": final_video_key,
+        "audio_url": final_audio_key,
+        "audio_path": merge_result["audio_path"],
+        "audio_storage_path": final_audio_key,
         "muxed": merge_result["muxed"],
     }
 
@@ -315,12 +352,20 @@ def _persist_step_assets(db, step: JobStep, project: Project, job: Job, output: 
         return
 
     if step.step_name == "tts":
+        audio_path = output.get("audio_path")
+        audio_storage_path = output.get("audio_storage_path")
+        if not audio_storage_path and audio_path and not str(audio_path).startswith(("jobs/", "projects/")):
+            audio_file = Path(audio_path)
+            if audio_file.exists():
+                audio_storage_path = f"jobs/{job.id}/audio/narration.wav"
+                _storage_service().put_bytes(audio_storage_path, audio_file.read_bytes(), "audio/wav")
+                output["audio_storage_path"] = audio_storage_path
         db.add(
             Asset(
                 project_id=project.id,
                 job_id=job.id,
                 asset_type="narration_audio",
-                storage_path=output["audio_path"],
+                storage_path=output.get("audio_storage_path", output["audio_path"]),
                 mime_type="audio/wav",
                 metadata_json=json.dumps(output),
             )
@@ -344,7 +389,7 @@ def _persist_step_assets(db, step: JobStep, project: Project, job: Job, output: 
                 project_id=project.id,
                 job_id=job.id,
                 asset_type="video_artifact",
-                storage_path=output["video_path"],
+                storage_path=output.get("video_storage_path", output["video_path"]),
                 mime_type="video/mp4",
                 metadata_json=json.dumps(output),
             )
@@ -368,7 +413,7 @@ def _persist_step_assets(db, step: JobStep, project: Project, job: Job, output: 
                 project_id=project.id,
                 job_id=job.id,
                 asset_type="final_video",
-                storage_path=output["video_url"],
+                storage_path=output.get("video_storage_path", output["video_url"]),
                 mime_type="video/mp4",
                 metadata_json=json.dumps(output),
             )
@@ -427,7 +472,7 @@ def run_job_pipeline(job_id: str):
             context[step.step_name] = output
 
             artifact_path = _write_json(
-                f"projects/{job.project_id}/jobs/{job.id}/{step.step_name}.json",
+                f"jobs/{job.id}/artifacts/{step.step_name}.json",
                 output,
             )
 

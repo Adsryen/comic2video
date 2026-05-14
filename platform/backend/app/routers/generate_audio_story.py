@@ -3,21 +3,14 @@ import os
 import boto3
 import random
 from fastapi import APIRouter, Form, UploadFile, File, HTTPException
-from ..utils.supabase_utils import supabase_upload 
-from supabase import create_client
+from ..services.storage_service import StorageService
 
 router = APIRouter()
 
 # ---------------------------------------------------------
 # 1. SETUP CLIENTS
 # ---------------------------------------------------------
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
-
-if not SUPABASE_URL or not SUPABASE_KEY:
-    raise RuntimeError("❌ Missing SUPABASE_URL or SUPABASE_KEY env vars")
-
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+storage = StorageService()
 
 sqs = boto3.client("sqs", region_name=os.environ.get("AWS_REGION", "eu-north-1"))
 QUEUE_URL = os.environ.get("SQS_QUEUE_URL")
@@ -41,7 +34,7 @@ async def start_generation(
         # Use str(task_id) for filename to be safe
         unique_filename = f"uploads/{str(task_id)}_{manga_name[:10].replace(' ', '_')}.pdf"
         
-        pdf_url = supabase_upload(file_bytes, unique_filename, "application/pdf")
+        pdf_url = storage.put_bytes(unique_filename, file_bytes, "application/pdf")
 
         # C. Create Database Entry
         new_job_data = {
@@ -52,7 +45,7 @@ async def start_generation(
             "created_at": "now()"
         }
 
-        supabase.table("jobs").insert(new_job_data).execute()
+        # TODO: replace legacy external jobs table write during PostgreSQL migration phase
         print("✅ Database Row Created")
 
         # D. Send to SQS
@@ -88,8 +81,8 @@ async def start_generation(
 async def get_status(task_id: str):
     try:
         # task_id comes as string from URL (safe)
-        # We assume Supabase/Postgres handles the lookup correctly
-        response = supabase.table("jobs").select("*").eq("id", task_id).execute()
+        # Legacy external job lookup is no longer supported in local storage mode
+        raise HTTPException(status_code=501, detail="Legacy external jobs table lookup is not supported in local storage mode")
 
         if not response.data:
             # Pass the 404 directly (don't wrap in 500)
