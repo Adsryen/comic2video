@@ -67,5 +67,13 @@ tts_cache/
 *.sqlite
 *.sqlite3
 *.db
-.agents/
-docs/
+
+# Generated docs / plans
+# Keep project docs, ignore local planning artifacts only.
+docs/superpowers/
+
+# Test artifacts / scratch files
+coverage/
+pytestdebug.log
+*.tmp
+*.bak

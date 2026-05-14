@@ -110,7 +110,7 @@ graph TB
     C --> D[OCR Processing]
     D --> E[Google Gemini LLM]
     E --> F[TTS Audio Generation]
-    F --> G[Upload to Supabase]
+    F --> G[Store assets in MinIO / local storage]
     G --> H[Return JSON to Frontend]
     H --> I[FFmpeg.wasm Video Generation]
     I --> J[Final Video Download]
@@ -132,7 +132,7 @@ graph TB
 - 🤖 **Google Gemini** - LLM script generation
 - 🎤 **gTTS** - Text-to-speech
 - 🖼️ **OpenCV + Tesseract** - OCR processing
-- 📦 **Supabase** - Cloud storage
+- 📦 **MinIO / Local Storage** - Self-hosted object storage
 - 🐳 **Docker** - Containerization
 - ☁️ **Google Cloud Run** - Serverless deployment
 
@@ -168,7 +168,7 @@ graph TB
 
 # API Keys Needed
 - Google Gemini API Key (Free tier available)
-- Supabase Project (Free tier available)
+- MinIO service or local filesystem storage
 ```
 
 ### 📥 Installation
@@ -219,10 +219,12 @@ nano .env
 **Required Environment Variables:**
 
 ```env
-# Supabase Configuration
-SUPABASE_URL=https://xxxxx.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGc...
-SUPABASE_BUCKET_NAME=Manhwa_ai
+# Object Storage Configuration
+STORAGE_PROVIDER=minio
+MINIO_ENDPOINT=http://127.0.0.1:29000
+MINIO_ACCESS_KEY=comic2video_minio
+MINIO_SECRET_KEY=comic2video_minio_secret
+MINIO_BUCKET=comic2video
 
 # Google Gemini API
 GOOGLE_API_KEY=AIzaSy...
@@ -300,9 +302,9 @@ npm run preview
 # Backend only
 cd backend
 docker build -t manhwa-backend .
-docker run -p 8000:8080 -e SUPABASE_URL=$SUPABASE_URL -e SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY 
-  -e GOOGLE_API_KEY=$GOOGLE_API_KEY \
-  -e SUPABASE_BUCKET_NAME=$SUPABASE_BUCKET_NAME \
+docker run -p 8000:8080 -e STORAGE_PROVIDER=minio -e MINIO_ENDPOINT=$MINIO_ENDPOINT \
+  -e MINIO_ACCESS_KEY=$MINIO_ACCESS_KEY -e MINIO_SECRET_KEY=$MINIO_SECRET_KEY \
+  -e MINIO_BUCKET=$MINIO_BUCKET -e GOOGLE_API_KEY=$GOOGLE_API_KEY \
   manhwa-backend
 
 # Full stack (docker-compose)
@@ -372,10 +374,12 @@ gcloud run deploy manhwa-backend \
   --timeout 300 \
   --memory 2Gi \
   --cpu 2 \
-  --set-env-vars "SUPABASE_URL=$SUPABASE_URL" \
-  --set-env-vars "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY" \
-  --set-env-vars "GOOGLE_API_KEY=$GOOGLE_API_KEY" \
-  --set-env-vars "SUPABASE_BUCKET_NAME=$SUPABASE_BUCKET_NAME"
+  --set-env-vars "STORAGE_PROVIDER=minio" \
+  --set-env-vars "MINIO_ENDPOINT=$MINIO_ENDPOINT" \
+  --set-env-vars "MINIO_ACCESS_KEY=$MINIO_ACCESS_KEY" \
+  --set-env-vars "MINIO_SECRET_KEY=$MINIO_SECRET_KEY" \
+  --set-env-vars "MINIO_BUCKET=$MINIO_BUCKET" \
+  --set-env-vars "GOOGLE_API_KEY=$GOOGLE_API_KEY"
 ```
 
 **5. Get Deployment URL**
@@ -487,10 +491,12 @@ Add these secrets:
 ```
 GCP_PROJECT_ID=your-project-id
 GCP_SERVICE_ACCOUNT_KEY=<paste full JSON key>
-SUPABASE_URL=https://xxxxx.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGc...
+STORAGE_PROVIDER=minio
+MINIO_ENDPOINT=http://127.0.0.1:29000
+MINIO_ACCESS_KEY=comic2video_minio
+MINIO_SECRET_KEY=comic2video_minio_secret
+MINIO_BUCKET=comic2video
 GOOGLE_API_KEY=AIzaSy...
-SUPABASE_BUCKET_NAME=Manhwa_ai
 GCP_REGION=asia-south1
 ```
 
@@ -591,10 +597,10 @@ curl -X POST "https://manhwa-backend-xxxxx.run.app/api/v1/generate_audio_story" 
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
   "manga_name": "One Piece Chapter 1",
   "image_urls": [
-    "https://supabase.co/.../page_00.jpg",
-    "https://supabase.co/.../page_01.jpg"
+    "projects/demo/images/page_00.jpg",
+    "projects/demo/images/page_01.jpg"
   ],
-  "audio_url": "https://supabase.co/.../master_audio.mp3",
+  "audio_url": "jobs/demo/audio/master_audio.mp3",
   "final_video_segments": [
     {
       "narration_segment": "Yeh kahani hai...",
@@ -723,7 +729,7 @@ Manhwa-AI/
 │   │       ├── vision_utils.py
 │   │       ├── openai_utils.py
 │   │       ├── tts_utils.py
-│   │       └── supabase_utils.py
+│   │       └── storage_service.py
 │   ├── requirements.txt
 │   ├── Dockerfile
 │   └── .env
@@ -812,7 +818,7 @@ console.log('FFmpeg load time:', loadTime);
 | Error | Cause | Solution |
 |-------|-------|----------|
 | `No module named 'app'` | Wrong directory | Run from `backend/` folder |
-| `SUPABASE_URL not set` | Missing env vars | Check `.env` file |
+| `MINIO_ENDPOINT not set` | Missing object storage env vars | Check `.env` file |
 | `FFmpeg not found` | Missing dependency | Install FFmpeg |
 | `Image decode failed` | Corrupted upload | Re-upload PDF |
 | `429 Too Many Requests` | Rate limit | Add delay between requests |
@@ -928,7 +934,7 @@ of this software and associated documentation files...
 - [React](https://react.dev/) - UI library
 - [Google Gemini](https://ai.google.dev/) - AI language model
 - [FFmpeg.wasm](https://ffmpegwasm.netlify.app/) - Browser video processing
-- [Supabase](https://supabase.com/) - Backend as a Service
+- [MinIO](https://min.io/) - S3-compatible object storage
 - [Vercel](https://vercel.com/) - Frontend hosting
 - [Google Cloud Run](https://cloud.google.com/run) - Serverless backend hosting
 

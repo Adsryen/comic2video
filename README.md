@@ -110,16 +110,13 @@ VITE_DEMO_MODE=true
 
 ```env
 VITE_API_BASE_URL=https://your-backend-domain.com
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
 VITE_DEMO_MODE=false
 ```
 
 说明：
 
 - `VITE_API_BASE_URL`：前端访问平台后端 API 的地址
-- `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`：仅在需要登录时使用
-- 若不配置 Supabase，认证能力会自动降级，不影响平台主流程展示
+- 前端登录改为本地认证 API；如需 Google 登录，请配置后端 Google OAuth 环境变量
 
 ### 模型替换思路
 
@@ -255,16 +252,13 @@ If you want the deployed frontend to call your real platform backend, configure:
 
 ```env
 VITE_API_BASE_URL=https://your-backend-domain.com
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
 VITE_DEMO_MODE=false
 ```
 
 Notes:
 
 - `VITE_API_BASE_URL` points the frontend to your backend API
-- `VITE_SUPABASE_*` is only needed if you want authentication enabled
-- if Supabase is omitted, auth gracefully disables while the main UI can still render
+- Frontend auth now uses the local backend auth APIs; configure backend Google OAuth values if you want Google sign-in.
 
 ### Model Replacement Strategy
 
