@@ -19,7 +19,7 @@ export default function ProjectJobsPanel({ jobs }) {
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <div className="font-medium">{modeLabel(job.mode)} · {statusLabel(job.status)}</div>
-                  <div className="text-xs text-white/60">{job.language || '-'} · {job.voice || '-'} · {job.subtitle_enabled ? (locale === 'zh' ? '字幕开' : 'Subtitles on') : (locale === 'zh' ? '字幕关' : 'Subtitles off')}</div>
+                  <div className="text-xs text-white/60">{job.language || '-'} · {job.voice || '-'} · {job.subtitle_enabled ? t.subtitlesOn : t.subtitlesOff}</div>
                   <div className="text-sm text-white/50">{new Date(job.created_at).toLocaleString()}</div>
                 </div>
                 <div className="text-sm text-white/70">{job.progress}%</div>

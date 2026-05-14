@@ -12,32 +12,28 @@ import {
   AudioLines,
   Languages,
   Boxes,
+  GitBranch,
 } from 'lucide-react';
 import { useLocale } from '../context/LocaleContext';
+import { usePlatformI18n } from '../components/platform/platformText';
 
 const DocSection = ({ icon: Icon, title, id, children }) => (
-  <div id={id} className="scroll-mt-24">
-    <div className="bg-gradient-to-br from-gray-900/60 to-gray-800/40 backdrop-blur-xl border border-purple-500/30 rounded-2xl p-6 sm:p-8 lg:p-10 shadow-2xl transition-all duration-500 hover:border-purple-400/60 hover:shadow-purple-500/20 hover:shadow-2xl">
-      <div className="flex items-center gap-3 sm:gap-4 mb-6 sm:mb-8">
-        <div className="p-3 bg-purple-600/20 rounded-xl border border-purple-500/30">
-          <Icon className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 text-purple-400" />
-        </div>
-        <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-purple-300 to-white">
-          {title}
-        </h2>
+  <section id={id} className="scroll-mt-24 rounded-[2rem] border border-white/10 bg-black/25 p-6 shadow-[0_20px_80px_rgba(0,0,0,0.28)] backdrop-blur-xl sm:p-8">
+    <div className="mb-6 flex items-center gap-4">
+      <div className="rounded-2xl border border-purple-500/30 bg-purple-500/10 p-3">
+        <Icon className="h-6 w-6 text-purple-300" />
       </div>
-      <div className="space-y-4 sm:space-y-5 text-gray-300 text-sm sm:text-base lg:text-lg leading-relaxed">
-        {children}
-      </div>
+      <h2 className="text-2xl font-semibold text-white sm:text-3xl">{title}</h2>
     </div>
-  </div>
+    <div className="space-y-4 text-sm leading-7 text-white/70 sm:text-base">{children}</div>
+  </section>
 );
 
 const docsCopy = {
   zh: {
     heroTitle: '平台文档',
     heroSubtitle: '围绕 PDF / CBZ 漫画上传、解析、分镜、配音和视频生成的二开平台说明。',
-    heroMeta: '当前文档已改为适配 Platform 的工作流，不再沿用参考项目的旧产品叙事。',
+    heroMeta: '当前文档已经按本地 Platform 工作流整理，重点是可部署、可调试、可替换。',
     navTitle: '快速导航',
     nav: [
       { id: 'overview', title: '整体概览' },
@@ -48,291 +44,236 @@ const docsCopy = {
     ],
     overviewTitle: '整体概览',
     overviewBody: [
-      'Platform 是一个面向漫画转视频场景的二开平台，当前重点是先把“可运行、可观察、可替换”的全流程搭起来。',
+      'Platform 是一个面向漫画转视频场景的本地化平台，当前目标是先把上传、解析、分镜、配音、渲染这一条链路稳定跑通。',
       '你可以上传 PDF 或 CBZ 漫画源文件，创建项目和生成任务，并查看解析图片、分镜 JSON、旁白音频、中间视频和最终视频结果。',
-      '当前版本优先服务企业内网部署、自建模型接入和后续任务编排扩展，而不是一次性追求营销包装。',
+      '当前版本优先服务内网部署、自建模型接入和后续任务编排扩展，而不是营销型展示站。',
     ],
     featuresTitle: '当前能力',
     featureCards: [
-      {
-        title: '项目化资产管理',
-        desc: '所有源文件、画格图、分镜、音频和视频都挂在项目与任务之下，便于追踪和复用。',
-      },
-      {
-        title: 'PDF / CBZ 双入口',
-        desc: '上传层已经支持 PDF 与 CBZ，并统一进入后续解析与生成流水线。',
-      },
-      {
-        title: '可降级的配音与合成',
-        desc: '缺少 ffmpeg 或在线 TTS 失败时，系统会优雅降级，确保流程可继续。',
-      },
-      {
-        title: '中英双语前端',
-        desc: '前端默认中文，并会根据浏览器语言自动切换；同时支持手动中英切换。',
-      },
+      { title: '项目化资产管理', desc: '源文件、画格图、分镜、音频和视频都归档到项目与任务之下，方便追踪与复用。' },
+      { title: 'PDF / CBZ 双入口', desc: '上传层支持 PDF 与 CBZ，并统一进入后续解析与生成流水线。' },
+      { title: '可降级的配音与合成', desc: '缺少 ffmpeg 或在线 TTS 失败时，系统会优雅降级，确保流程不中断。' },
+      { title: '双语前端界面', desc: '前端默认中文，同时支持英文和运行时语言切换。' },
     ],
     workflowTitle: '处理流程',
     workflowSteps: [
-      ['上传源文件', '创建项目后保存源 PDF / CBZ，并写入本地存储。'],
+      ['上传源文件', '创建项目后保存源 PDF / CBZ，并写入当前对象存储。'],
       ['解析漫画内容', '提取页面或图片，生成 panel 图片清单与基础 OCR 结果。'],
-      ['构建分镜', '基于 panel 数据生成场景列表，得到 narration、subtitle 和 prompt。'],
+      ['构建分镜', '基于 panel 数据生成 narration、subtitle 和 prompt 等场景结构。'],
       ['生成音频', '将旁白文本转成音频；环境不足时会退化为静音旁白。'],
       ['渲染视频', '先产出基于 panel 的幻灯片视频，再尝试音视频合成。'],
-      ['输出结果', '将最终视频、音频和元数据挂到任务资产中，供前端预览与下载。'],
+      ['输出结果', '将最终视频、音频和元数据挂到任务资产中，供预览与下载。'],
     ],
     startTitle: '快速开始',
     startItems: [
-      '先启动后端与前端服务，并确认项目页“系统状态”里后端正常。',
-      '如果要启用登录，请配置前端 Supabase 环境变量；不配置也能继续使用平台主流程。',
+      '先启动后端、Celery 和前端服务，并确认平台首页的系统状态为可用。',
+      '需要登录时，使用本地管理员账号或自定义启动参数覆盖管理员用户名密码。',
       '如果要生成真正带音轨的视频，请在运行环境安装 ffmpeg。',
       '如果要让 OCR 更稳定，请在服务器安装 tesseract 并检查 `/api/v1/models` 状态。',
     ],
     tipsTitle: '实践建议',
     tipCards: [
-      {
-        title: '先跑通，再提质',
-        desc: '建议先确保上传、解析、分镜、音频、视频链路全部通畅，再逐个替换成更强模型。',
-      },
-      {
-        title: '优先做可观察性',
-        desc: '把任务状态、资产类型、失败原因和环境探测做清楚，比一开始堆模型更省时间。',
-      },
-      {
-        title: '小批量测试素材',
-        desc: '前期推荐先用页数更少的漫画测试，快速迭代提示词、分镜和视频节奏。',
-      },
-      {
-        title: '模型替换分层进行',
-        desc: '建议按 OCR → 脚本 → TTS → 视频 的顺序逐层替换，便于定位质量问题。',
-      },
+      { title: '先跑通，再提质', desc: '先确保上传、解析、分镜、音频、视频链路通畅，再逐个替换更强模型。' },
+      { title: '优先做可观察性', desc: '把任务状态、资产类型、失败原因和环境探测做清楚，比一开始堆模型更省时间。' },
+      { title: '小批量测试素材', desc: '前期先用页数更少的漫画测试，快速迭代提示词、分镜和视频节奏。' },
+      { title: '模型按层替换', desc: '建议按 OCR → 脚本 → TTS → 视频 的顺序逐层替换，便于定位问题。' },
     ],
-    footer: '下一阶段建议继续补任务编排、模型配置面板、可编辑分镜和更真实的镜头运动策略。',
+    footer: '下一阶段建议补任务编排、模型配置面板、可编辑分镜和更真实的镜头运动策略。',
   },
   en: {
     heroTitle: 'Platform Documentation',
-    heroSubtitle: 'A practical guide to the forked platform built around PDF / CBZ comic upload, parsing, storyboard generation, TTS, and video output.',
-    heroMeta: 'This documentation now reflects the Platform workflow instead of the older product narrative from the reference project.',
+    heroSubtitle: 'A practical guide to the local platform built around PDF / CBZ upload, parsing, storyboard generation, TTS, and video rendering.',
+    heroMeta: 'This page focuses on deployability, debugging, and replaceable components rather than marketing copy.',
     navTitle: 'Quick Navigation',
     nav: [
       { id: 'overview', title: 'Overview' },
-      { id: 'features', title: 'Current Capabilities' },
-      { id: 'workflow', title: 'Processing Workflow' },
+      { id: 'features', title: 'Capabilities' },
+      { id: 'workflow', title: 'Workflow' },
       { id: 'getting-started', title: 'Getting Started' },
       { id: 'tips', title: 'Practical Advice' },
     ],
     overviewTitle: 'Overview',
     overviewBody: [
-      'Platform is a fork-oriented comic-to-video system focused on getting a runnable, observable, and replaceable end-to-end workflow in place first.',
-      'You can upload PDF or CBZ sources, create projects and jobs, and inspect parsed images, storyboard JSON, narration audio, intermediate video, and final results.',
-      'The current version is optimized more for internal deployment, self-hosted model integration, and future orchestration than for marketing polish.',
+      'Platform is a local comic-to-video workflow focused on making the full pipeline stable first: upload, parse, storyboard, narration, and rendering.',
+      'You can upload PDF or CBZ sources, create projects and jobs, and inspect panels, storyboard JSON, narration audio, intermediate videos, and final outputs.',
+      'The current build prioritizes internal deployment, self-hosted providers, and future orchestration expansion.',
     ],
-    featuresTitle: 'Current Capabilities',
+    featuresTitle: 'Capabilities',
     featureCards: [
-      {
-        title: 'Project-based asset management',
-        desc: 'Source files, panel images, storyboards, audio, and video outputs are all attached to projects and jobs for easier tracing and reuse.',
-      },
-      {
-        title: 'PDF / CBZ dual entry',
-        desc: 'The ingestion layer now supports both PDF and CBZ and routes them into the same downstream pipeline.',
-      },
-      {
-        title: 'Graceful TTS and merge fallback',
-        desc: 'When ffmpeg is missing or online TTS fails, the system degrades gracefully so the workflow still completes.',
-      },
-      {
-        title: 'Bilingual frontend',
-        desc: 'The frontend defaults to Chinese, auto-detects browser language, and also supports manual Chinese / English switching.',
-      },
+      { title: 'Project-centered assets', desc: 'Source files, panels, storyboards, audio, and videos are attached to projects and jobs for traceability.' },
+      { title: 'PDF / CBZ inputs', desc: 'Uploads support both PDF and CBZ and flow into the same downstream pipeline.' },
+      { title: 'Graceful fallbacks', desc: 'If ffmpeg or online TTS is unavailable, the workflow still degrades cleanly instead of hard failing.' },
+      { title: 'Bilingual UI', desc: 'The frontend supports both Chinese and English with runtime switching.' },
     ],
-    workflowTitle: 'Processing Workflow',
+    workflowTitle: 'Workflow',
     workflowSteps: [
-      ['Upload source', 'Create a project, persist the source PDF / CBZ, and register it in local storage.'],
-      ['Parse comic content', 'Extract pages or images and build a panel manifest with basic OCR output.'],
-      ['Build storyboard', 'Turn panel data into scenes with narration, subtitles, and prompts.'],
-      ['Generate audio', 'Convert narration text into audio, falling back to silent narration when required.'],
-      ['Render video', 'Create a slideshow-style intermediate video first, then attempt audio/video merging.'],
+      ['Upload source', 'Create a project, persist the source PDF or CBZ, and register it in storage.'],
+      ['Parse content', 'Extract pages or images and build panel images with baseline OCR output.'],
+      ['Build storyboard', 'Generate narration, subtitle, and prompt structures from panel data.'],
+      ['Generate audio', 'Convert narration text to audio, or fall back to silent narration if required.'],
+      ['Render video', 'Create a panel-based slideshow video first, then attempt audio/video merging.'],
       ['Publish results', 'Attach final video, audio, and metadata to job assets for preview and download.'],
     ],
     startTitle: 'Getting Started',
     startItems: [
-      'Start the backend and frontend services, then confirm the backend is healthy from the project page system status card.',
-      'If you want login enabled, configure frontend Supabase environment variables; if not, the main platform flow still works.',
-      'Install ffmpeg in the runtime environment if you want actual audio-muxed final videos.',
-      'Install tesseract on the server if you want stronger OCR and confirm it from `/api/v1/models`.',
+      'Start backend, Celery, and frontend services, then confirm the platform system status card looks healthy.',
+      'Use the built-in admin account or override startup parameters if you want controlled local login.',
+      'Install ffmpeg if you want muxed video output with audio tracks.',
+      'Install tesseract if you want stronger OCR and verify it through `/api/v1/models`.',
     ],
     tipsTitle: 'Practical Advice',
     tipCards: [
-      {
-        title: 'Get the flow working first',
-        desc: 'Make sure upload, parse, storyboard, audio, and video all work end to end before replacing components with stronger models.',
-      },
-      {
-        title: 'Prioritize observability',
-        desc: 'Clear job states, asset types, failure reasons, and environment checks save more time early on than adding more models immediately.',
-      },
-      {
-        title: 'Test on smaller batches',
-        desc: 'Use shorter comics first so you can iterate more quickly on prompts, storyboards, and pacing.',
-      },
-      {
-        title: 'Replace models layer by layer',
-        desc: 'Swap components in the order OCR → script → TTS → video so quality regressions are easier to isolate.',
-      },
+      { title: 'Make it work first', desc: 'Get upload, parse, storyboard, audio, and video working end to end before tuning quality.' },
+      { title: 'Invest in observability', desc: 'Clear job states, asset types, failure reasons, and environment checks pay off early.' },
+      { title: 'Test smaller comics', desc: 'Shorter sources make it easier to iterate on prompts, storyboards, and pacing.' },
+      { title: 'Replace providers layer by layer', desc: 'Swap OCR, script, TTS, and video components one layer at a time.' },
     ],
-    footer: 'A strong next phase would add job orchestration, model configuration panels, editable storyboards, and more realistic camera-motion policies.',
+    footer: 'A strong next phase would add orchestration, editable storyboards, richer provider controls, and more realistic camera motion policies.',
   },
 };
 
-const DocumentationPage = () => {
+const SparkSectionIcon = Film;
+
+export default function DocumentationPage() {
   const { locale } = useLocale();
+  const { t } = usePlatformI18n();
   const copy = docsCopy[locale];
-  const [activeSection, setActiveSection] = useState('');
-
+  const [activeSection, setActiveSection] = useState('overview');
   const navLinks = useMemo(() => copy.nav, [copy]);
-
-  const handleNavClick = (id) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
-  };
 
   useEffect(() => {
     const handleScroll = () => {
-      const sections = navLinks.map((link) => link.id);
-      const scrollPosition = window.scrollY + 150;
-
-      for (const sectionId of sections) {
-        const element = document.getElementById(sectionId);
-        if (element) {
-          const { offsetTop, offsetHeight } = element;
-          if (scrollPosition >= offsetTop && scrollPosition < offsetTop + offsetHeight) {
-            setActiveSection(sectionId);
-            break;
-          }
+      const scrollPosition = window.scrollY + 180;
+      for (const link of navLinks) {
+        const element = document.getElementById(link.id);
+        if (!element) continue;
+        const { offsetTop, offsetHeight } = element;
+        if (scrollPosition >= offsetTop && scrollPosition < offsetTop + offsetHeight) {
+          setActiveSection(link.id);
+          break;
         }
       }
     };
 
     window.addEventListener('scroll', handleScroll);
+    handleScroll();
     return () => window.removeEventListener('scroll', handleScroll);
   }, [navLinks]);
 
+  const handleNavClick = (id) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   return (
-    <main className="relative min-h-screen -mt-10 text-white overflow-hidden">
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-0 py-6 sm:py-8 lg:py-10">
-        <header className="text-center pt-4 sm:pt-8 pb-6 sm:pb-8 lg:pb-12">
-          <div className="mb-3 sm:mb-4">
-            <h1 className="text-3xl sm:text-3xl md:text-4xl lg:text-4xl font-bold -mt-5 bg-clip-text text-transparent bg-white px-4">
-              {copy.heroTitle}
-            </h1>
+    <main className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-16 text-white">
+      <section className="mb-8 rounded-[2rem] border border-white/10 bg-gradient-to-br from-white/[0.08] via-white/[0.03] to-transparent p-6 shadow-[0_20px_100px_rgba(0,0,0,0.32)] backdrop-blur-xl sm:p-8">
+        <div className="mb-3 inline-flex rounded-full border border-purple-500/30 bg-purple-500/10 px-4 py-1.5 text-sm text-purple-200">
+          Docs
+        </div>
+        <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">{copy.heroTitle}</h1>
+        <p className="mt-3 max-w-4xl text-sm leading-7 text-white/65 sm:text-base">{copy.heroSubtitle}</p>
+        <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-yellow-400/20 bg-yellow-400/10 px-4 py-2 text-sm text-yellow-100">
+          <Zap className="h-4 w-4" />
+          <span>{copy.heroMeta}</span>
+        </div>
+      </section>
+
+      <div className="grid gap-8 lg:grid-cols-[0.32fr_0.68fr]">
+        <aside className="h-fit rounded-3xl border border-white/10 bg-black/25 p-5 shadow-[0_20px_80px_rgba(0,0,0,0.28)] backdrop-blur-xl lg:sticky lg:top-24">
+          <div className="mb-4 flex items-center gap-3 text-lg font-semibold text-purple-200">
+            <Layers className="h-5 w-5" />
+            {copy.navTitle}
           </div>
-          <p className="text-gray-300 text-base sm:text-lg md:text-xl lg:text-2xl font-light tracking-wide px-4 max-w-4xl mx-auto">
-            {copy.heroSubtitle}
-          </p>
-          <div className="flex items-center justify-center gap-2 mt-3 sm:mt-4 text-xs sm:text-sm text-yellow-400 px-4">
-            <Zap className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-            <span className="text-center">{copy.heroMeta}</span>
+          <div className="space-y-2">
+            {navLinks.map((link) => (
+              <button
+                key={link.id}
+                type="button"
+                onClick={() => handleNavClick(link.id)}
+                className={`block w-full rounded-2xl px-4 py-3 text-left text-sm transition ${
+                  activeSection === link.id
+                    ? 'border border-purple-400/30 bg-purple-500/15 text-white'
+                    : 'border border-transparent bg-white/[0.03] text-white/65 hover:border-white/10 hover:bg-white/[0.06] hover:text-white'
+                }`}
+              >
+                {link.title}
+              </button>
+            ))}
           </div>
-        </header>
+        </aside>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 lg:gap-12">
-          <nav className="hidden lg:block lg:col-span-1 lg:sticky lg:top-8 self-start z-40 bg-gray-900/50 backdrop-blur-md lg:rounded-xl lg:rounded-2xl border border-purple-500/20 shadow-xl p-6">
-            <div className="flex items-center justify-between mb-7 lg:mb-4">
-              <h3 className="text-md sm:text-xl font-bold text-purple-400 flex items-center gap-2">
-                <Layers className="w-5 h-5" /> {copy.navTitle}
-              </h3>
-            </div>
-            <div className="space-y-2">
-              {navLinks.map((link) => (
-                <button
-                  key={link.id}
-                  onClick={() => handleNavClick(link.id)}
-                  className={`block w-full text-left px-3 py-2 sm:py-2.5 rounded-lg transition-all duration-200 ${
-                    activeSection === link.id
-                      ? 'bg-purple-900/50 text-purple-300 border-l-4 border-purple-400'
-                      : 'text-gray-300 hover:text-purple-400 hover:bg-purple-900/30'
-                  }`}
-                >
-                  {link.title}
-                </button>
-              ))}
-            </div>
-          </nav>
+        <div className="space-y-8">
+          <DocSection icon={Boxes} title={copy.overviewTitle} id="overview">
+            {copy.overviewBody.map((paragraph) => (
+              <p key={paragraph}>{paragraph}</p>
+            ))}
+          </DocSection>
 
-          <div className="lg:col-span-2 space-y-8 sm:space-y-12 lg:space-y-16">
-            <DocSection icon={Boxes} title={copy.overviewTitle} id="overview">
-              {copy.overviewBody.map((paragraph) => (
-                <p key={paragraph}>{paragraph}</p>
-              ))}
-            </DocSection>
-
-            <DocSection icon={SparkSectionIcon} title={copy.featuresTitle} id="features">
-              <div className="grid gap-4 sm:grid-cols-2">
-                {copy.featureCards.map((item) => (
-                  <div key={item.title} className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                    <h4 className="mb-2 text-lg font-semibold text-purple-300">{item.title}</h4>
-                    <p className="text-sm text-gray-300 leading-relaxed">{item.desc}</p>
-                  </div>
-                ))}
-              </div>
-            </DocSection>
-
-            <DocSection icon={GitBranch} title={copy.workflowTitle} id="workflow">
-              <div className="space-y-4">
-                {copy.workflowSteps.map(([title, desc], index) => (
-                  <div key={title} className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                    <div className="mb-2 flex items-center gap-3 text-purple-300">
-                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-purple-500/15 text-sm font-bold text-white">{index + 1}</span>
-                      <h4 className="text-lg font-semibold">{title}</h4>
-                    </div>
-                    <p className="text-sm text-gray-300 leading-relaxed">{desc}</p>
-                  </div>
-                ))}
-              </div>
-            </DocSection>
-
-            <DocSection icon={PlayCircle} title={copy.startTitle} id="getting-started">
-              <div className="space-y-3">
-                {copy.startItems.map((item) => (
-                  <div key={item} className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <CheckCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-green-400" />
-                    <p className="text-sm text-gray-300 leading-relaxed">{item}</p>
-                  </div>
-                ))}
-              </div>
-            </DocSection>
-
-            <DocSection icon={Settings} title={copy.tipsTitle} id="tips">
-              <div className="grid gap-4 sm:grid-cols-2">
-                {copy.tipCards.map((item, index) => {
-                  const icons = [Clock, Database, Upload, AudioLines];
-                  const Icon = icons[index % icons.length];
-                  return (
-                    <div key={item.title} className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                      <div className="mb-3 flex items-center gap-3 text-purple-300">
-                        <Icon className="h-5 w-5" />
-                        <h4 className="text-lg font-semibold">{item.title}</h4>
-                      </div>
-                      <p className="text-sm text-gray-300 leading-relaxed">{item.desc}</p>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-900/30 to-indigo-900/20 p-5">
-                <div className="mb-3 flex items-center gap-3 text-purple-200">
-                  <Languages className="h-5 w-5" />
-                  <h4 className="text-lg font-semibold">Platform</h4>
+          <DocSection icon={SparkSectionIcon} title={copy.featuresTitle} id="features">
+            <div className="grid gap-4 sm:grid-cols-2">
+              {copy.featureCards.map((item) => (
+                <div key={item.title} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                  <h4 className="mb-2 text-lg font-semibold text-purple-200">{item.title}</h4>
+                  <p className="text-sm leading-7 text-white/65">{item.desc}</p>
                 </div>
-                <p className="text-sm text-gray-300 leading-relaxed">{copy.footer}</p>
+              ))}
+            </div>
+          </DocSection>
+
+          <DocSection icon={GitBranch} title={copy.workflowTitle} id="workflow">
+            <div className="space-y-4">
+              {copy.workflowSteps.map(([title, desc], index) => (
+                <div key={title} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                  <div className="mb-2 flex items-center gap-3">
+                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-purple-500/15 text-sm font-bold text-white">
+                      {index + 1}
+                    </span>
+                    <h4 className="text-lg font-semibold text-white">{title}</h4>
+                  </div>
+                  <p className="text-sm leading-7 text-white/65">{desc}</p>
+                </div>
+              ))}
+            </div>
+          </DocSection>
+
+          <DocSection icon={PlayCircle} title={copy.startTitle} id="getting-started">
+            <div className="space-y-3">
+              {copy.startItems.map((item) => (
+                <div key={item} className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <CheckCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-400" />
+                  <p className="text-sm leading-7 text-white/65">{item}</p>
+                </div>
+              ))}
+            </div>
+          </DocSection>
+
+          <DocSection icon={Settings} title={copy.tipsTitle} id="tips">
+            <div className="grid gap-4 sm:grid-cols-2">
+              {copy.tipCards.map((item, index) => {
+                const icons = [Clock, Database, Upload, AudioLines];
+                const Icon = icons[index % icons.length];
+                return (
+                  <div key={item.title} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                    <div className="mb-3 flex items-center gap-3 text-purple-200">
+                      <Icon className="h-5 w-5" />
+                      <h4 className="text-lg font-semibold text-white">{item.title}</h4>
+                    </div>
+                    <p className="text-sm leading-7 text-white/65">{item.desc}</p>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="rounded-2xl border border-purple-500/25 bg-purple-500/10 p-5">
+              <div className="mb-3 flex items-center gap-3 text-purple-200">
+                <Languages className="h-5 w-5" />
+                <h4 className="text-lg font-semibold text-white">Platform</h4>
               </div>
-            </DocSection>
-          </div>
+              <p className="text-sm leading-7 text-white/70">{copy.footer}</p>
+            </div>
+          </DocSection>
         </div>
       </div>
     </main>
   );
-};
-
-const SparkSectionIcon = Film;
-
-export default DocumentationPage;
+}
