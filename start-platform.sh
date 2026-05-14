@@ -7,13 +7,19 @@ FRONTEND_DIR="$ROOT_DIR/platform/frontend"
 BACKEND_VENV="$BACKEND_DIR/.venv-linux"
 BACKEND_LOG_DIR="$BACKEND_DIR/.logs"
 FRONTEND_LOG_DIR="$FRONTEND_DIR/.logs"
+BACKEND_ENV_FILE="$BACKEND_DIR/.env"
+FRONTEND_ENV_FILE="$FRONTEND_DIR/.env.local"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 CELERY_CONCURRENCY="${CELERY_CONCURRENCY:-1}"
 BACKEND_AUTH_ENABLED="${BACKEND_AUTH_ENABLED:-false}"
-BOOTSTRAP_ADMIN_EMAILS="${BOOTSTRAP_ADMIN_EMAILS:-1594959462@qq.com}"
+BOOTSTRAP_ADMIN_EMAILS="${BOOTSTRAP_ADMIN_EMAILS:-admin@local}"
 DEFAULT_NEW_USER_ROLE="${DEFAULT_NEW_USER_ROLE:-member}"
-LOCAL_COMPOSE_FILE="$ROOT_DIR/compose/local-infra/rabbitmq-redis.compose.yml"
+LOCAL_ADMIN_ENABLED="${LOCAL_ADMIN_ENABLED:-true}"
+LOCAL_ADMIN_USERNAME="${LOCAL_ADMIN_USERNAME:-admin}"
+LOCAL_ADMIN_PASSWORD="${LOCAL_ADMIN_PASSWORD:-admin}"
+LOCAL_ADMIN_DISPLAY_NAME="${LOCAL_ADMIN_DISPLAY_NAME:-Administrator}"
+LOCAL_COMPOSE_FILE="$ROOT_DIR/compose/local-infra/core.compose.yml"
 
 CELERY_PID=""
 UVICORN_PID=""
@@ -47,8 +53,88 @@ ensure_ready() {
   [[ -d "$FRONTEND_DIR/node_modules" ]] || fail "Frontend dependencies are missing. Run: bash setup-platform.sh"
 }
 
+read_env_value() {
+  local file="$1"
+  local key="$2"
+  local line value
+
+  [[ -f "$file" ]] || return 1
+
+  line=$(grep -E "^[[:space:]]*${key}=" "$file" | head -n 1 || true)
+  [[ -n "$line" ]] || return 1
+
+  value="${line#*=}"
+  value="${value%%#*}"
+  value="$(printf '%s' "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+
+  if [[ "$value" =~ ^\".*\"$ ]] || [[ "$value" =~ ^\'.*\'$ ]]; then
+    value="${value:1:-1}"
+  fi
+
+  printf '%s' "$value"
+}
+
+is_placeholder_value() {
+  local value="${1:-}"
+
+  [[ -z "$value" ]] && return 0
+
+  case "$value" in
+    *"<"*">"*)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+upsert_env_value() {
+  local file="$1"
+  local key="$2"
+  local value="$3"
+  local tmp_file
+
+  tmp_file=$(mktemp)
+  awk -v key="$key" -v value="$value" '
+    BEGIN { updated = 0 }
+    $0 ~ "^[[:space:]]*" key "=" {
+      if (!updated) {
+        print key "=" value
+        updated = 1
+      }
+      next
+    }
+    { print }
+    END {
+      if (!updated) {
+        print key "=" value
+      }
+    }
+  ' "$file" > "$tmp_file"
+  mv "$tmp_file" "$file"
+}
+
+ensure_frontend_env() {
+  local frontend_api_base_url
+
+  if [[ ! -f "$FRONTEND_ENV_FILE" ]]; then
+    log "Creating $FRONTEND_ENV_FILE"
+    cat > "$FRONTEND_ENV_FILE" <<EOF
+VITE_API_BASE_URL=http://localhost:$BACKEND_PORT
+VITE_DEMO_MODE=false
+EOF
+  fi
+
+  frontend_api_base_url="$(read_env_value "$FRONTEND_ENV_FILE" "VITE_API_BASE_URL" || true)"
+
+  if is_placeholder_value "$frontend_api_base_url"; then
+    upsert_env_value "$FRONTEND_ENV_FILE" "VITE_API_BASE_URL" "http://localhost:$BACKEND_PORT"
+    log "Set default VITE_API_BASE_URL=http://localhost:$BACKEND_PORT"
+  fi
+}
+
 ensure_docker_compose() {
-  command -v docker >/dev/null 2>&1 || fail "Docker is required to start RabbitMQ/Redis locally. Install Docker first."
+  command -v docker >/dev/null 2>&1 || fail "Docker is required to start RabbitMQ/Redis/MinIO locally. Install Docker first."
   docker compose version >/dev/null 2>&1 || fail "Docker Compose v2 is required."
 }
 
@@ -79,8 +165,9 @@ start_local_infra() {
     cd "$BACKEND_DIR"
     docker compose -f "$LOCAL_COMPOSE_FILE" up -d
   )
-  wait_for_port 127.0.0.1 5672 RabbitMQ 45
-  wait_for_port 127.0.0.1 6379 Redis 45
+  wait_for_port 127.0.0.1 25672 RabbitMQ 45
+  wait_for_port 127.0.0.1 26379 Redis 45
+  wait_for_port 127.0.0.1 29000 MinIO 45
 }
 
 cleanup() {
@@ -133,6 +220,17 @@ start_services() {
     export BACKEND_AUTH_ENABLED="$BACKEND_AUTH_ENABLED"
     export BOOTSTRAP_ADMIN_EMAILS="$BOOTSTRAP_ADMIN_EMAILS"
     export DEFAULT_NEW_USER_ROLE="$DEFAULT_NEW_USER_ROLE"
+    export LOCAL_ADMIN_ENABLED="$LOCAL_ADMIN_ENABLED"
+    export LOCAL_ADMIN_USERNAME="$LOCAL_ADMIN_USERNAME"
+    export LOCAL_ADMIN_PASSWORD="$LOCAL_ADMIN_PASSWORD"
+    export LOCAL_ADMIN_DISPLAY_NAME="$LOCAL_ADMIN_DISPLAY_NAME"
+    export RABBITMQ_URL="${RABBITMQ_URL:-amqp://guest:guest@127.0.0.1:25672//}"
+    export REDIS_URL="${REDIS_URL:-redis://127.0.0.1:26379/0}"
+    export STORAGE_PROVIDER="${STORAGE_PROVIDER:-minio}"
+    export MINIO_ENDPOINT="${MINIO_ENDPOINT:-http://127.0.0.1:29000}"
+    export MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-comic2video_minio}"
+    export MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-comic2video_minio_secret}"
+    export MINIO_BUCKET="${MINIO_BUCKET:-comic2video}"
     celery -A app.celery_app worker --loglevel=info --concurrency="$CELERY_CONCURRENCY"
   ) >"$BACKEND_LOG_DIR/celery.log" 2>&1 &
   CELERY_PID=$!
@@ -145,6 +243,17 @@ start_services() {
     export BACKEND_AUTH_ENABLED="$BACKEND_AUTH_ENABLED"
     export BOOTSTRAP_ADMIN_EMAILS="$BOOTSTRAP_ADMIN_EMAILS"
     export DEFAULT_NEW_USER_ROLE="$DEFAULT_NEW_USER_ROLE"
+    export LOCAL_ADMIN_ENABLED="$LOCAL_ADMIN_ENABLED"
+    export LOCAL_ADMIN_USERNAME="$LOCAL_ADMIN_USERNAME"
+    export LOCAL_ADMIN_PASSWORD="$LOCAL_ADMIN_PASSWORD"
+    export LOCAL_ADMIN_DISPLAY_NAME="$LOCAL_ADMIN_DISPLAY_NAME"
+    export RABBITMQ_URL="${RABBITMQ_URL:-amqp://guest:guest@127.0.0.1:25672//}"
+    export REDIS_URL="${REDIS_URL:-redis://127.0.0.1:26379/0}"
+    export STORAGE_PROVIDER="${STORAGE_PROVIDER:-minio}"
+    export MINIO_ENDPOINT="${MINIO_ENDPOINT:-http://127.0.0.1:29000}"
+    export MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-comic2video_minio}"
+    export MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-comic2video_minio_secret}"
+    export MINIO_BUCKET="${MINIO_BUCKET:-comic2video}"
     uvicorn app.main:app --host 0.0.0.0 --port "$BACKEND_PORT" --reload
   ) >"$BACKEND_LOG_DIR/uvicorn.log" 2>&1 &
   UVICORN_PID=$!
@@ -179,6 +288,7 @@ main() {
   require_dir "$FRONTEND_DIR"
   ensure_supported_shell_os
   ensure_ready
+  ensure_frontend_env
   start_local_infra
   trap cleanup INT TERM EXIT
   start_services

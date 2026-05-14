@@ -14,13 +14,17 @@ $EnvExample = Join-Path $BackendDir '.env.example'
 $EnvFile = Join-Path $BackendDir '.env'
 $BackendLogDir = Join-Path $BackendDir '.logs'
 $FrontendLogDir = Join-Path $FrontendDir '.logs'
-$LocalComposeFile = Join-Path $RootDir 'compose/local-infra/rabbitmq-redis.compose.yml'
+$LocalComposeFile = Join-Path $RootDir 'compose/local-infra/core.compose.yml'
 $BackendPort = if ($env:BACKEND_PORT) { $env:BACKEND_PORT } else { '8000' }
 $FrontendPort = if ($env:FRONTEND_PORT) { $env:FRONTEND_PORT } else { '5173' }
 $CeleryConcurrency = if ($env:CELERY_CONCURRENCY) { $env:CELERY_CONCURRENCY } else { '1' }
 $BackendAuthEnabled = if ($env:BACKEND_AUTH_ENABLED) { $env:BACKEND_AUTH_ENABLED } else { 'false' }
-$BootstrapAdminEmails = if ($env:BOOTSTRAP_ADMIN_EMAILS) { $env:BOOTSTRAP_ADMIN_EMAILS } else { 'admin@example.com' }
+$BootstrapAdminEmails = if ($env:BOOTSTRAP_ADMIN_EMAILS) { $env:BOOTSTRAP_ADMIN_EMAILS } else { 'admin@local' }
 $DefaultNewUserRole = if ($env:DEFAULT_NEW_USER_ROLE) { $env:DEFAULT_NEW_USER_ROLE } else { 'member' }
+$LocalAdminEnabled = if ($env:LOCAL_ADMIN_ENABLED) { $env:LOCAL_ADMIN_ENABLED } else { 'true' }
+$LocalAdminUsername = if ($env:LOCAL_ADMIN_USERNAME) { $env:LOCAL_ADMIN_USERNAME } else { 'admin' }
+$LocalAdminPassword = if ($env:LOCAL_ADMIN_PASSWORD) { $env:LOCAL_ADMIN_PASSWORD } else { 'admin' }
+$LocalAdminDisplayName = if ($env:LOCAL_ADMIN_DISPLAY_NAME) { $env:LOCAL_ADMIN_DISPLAY_NAME } else { 'Administrator' }
 
 function Pause-OnError($Message) {
     Write-Host "`n[ERROR] $Message" -ForegroundColor Red
@@ -106,7 +110,7 @@ function Ensure-LogDirs {
 function Ensure-DockerCompose {
     $docker = Get-Command docker -ErrorAction SilentlyContinue
     if (-not $docker) {
-        throw 'Docker is required to start RabbitMQ/Redis locally. Install Docker first.'
+        throw 'Docker is required to start RabbitMQ/Redis/MinIO locally. Install Docker first.'
     }
 
     & docker compose version *> $null
@@ -157,8 +161,9 @@ function Start-LocalInfra {
         Pop-Location
     }
 
-    Wait-ForPort '127.0.0.1' 5672 'RabbitMQ' 45
-    Wait-ForPort '127.0.0.1' 6379 'Redis' 45
+    Wait-ForPort '127.0.0.1' 25672 'RabbitMQ' 45
+    Wait-ForPort '127.0.0.1' 26379 'Redis' 45
+    Wait-ForPort '127.0.0.1' 29000 'MinIO' 45
 }
 
 function Quote-ProcessArg($Value) {
@@ -234,6 +239,17 @@ try {
         'BACKEND_AUTH_ENABLED' = $BackendAuthEnabled
         'BOOTSTRAP_ADMIN_EMAILS' = $BootstrapAdminEmails
         'DEFAULT_NEW_USER_ROLE' = $DefaultNewUserRole
+        'LOCAL_ADMIN_ENABLED' = $LocalAdminEnabled
+        'LOCAL_ADMIN_USERNAME' = $LocalAdminUsername
+        'LOCAL_ADMIN_PASSWORD' = $LocalAdminPassword
+        'LOCAL_ADMIN_DISPLAY_NAME' = $LocalAdminDisplayName
+        'RABBITMQ_URL' = if ($env:RABBITMQ_URL) { $env:RABBITMQ_URL } else { 'amqp://guest:guest@127.0.0.1:25672//' }
+        'REDIS_URL' = if ($env:REDIS_URL) { $env:REDIS_URL } else { 'redis://127.0.0.1:26379/0' }
+        'STORAGE_PROVIDER' = if ($env:STORAGE_PROVIDER) { $env:STORAGE_PROVIDER } else { 'minio' }
+        'MINIO_ENDPOINT' = if ($env:MINIO_ENDPOINT) { $env:MINIO_ENDPOINT } else { 'http://127.0.0.1:29000' }
+        'MINIO_ACCESS_KEY' = if ($env:MINIO_ACCESS_KEY) { $env:MINIO_ACCESS_KEY } else { 'comic2video_minio' }
+        'MINIO_SECRET_KEY' = if ($env:MINIO_SECRET_KEY) { $env:MINIO_SECRET_KEY } else { 'comic2video_minio_secret' }
+        'MINIO_BUCKET' = if ($env:MINIO_BUCKET) { $env:MINIO_BUCKET } else { 'comic2video' }
     }
 
     Write-Info 'Starting Celery worker'
