@@ -1,10 +1,6 @@
 import os
 import tempfile
 
-os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
-os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-key")
-os.environ.setdefault("SUPABASE_BUCKET_NAME", "test-bucket")
-os.environ.setdefault("SUPABASE_BUCKET", "test-bucket")
 os.environ.setdefault("RABBITMQ_URL", "memory://")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("GROQ_API_KEY", "test-key")
@@ -14,49 +10,7 @@ os.environ.setdefault("STORAGE_ROOT", os.path.join(_temp_dir, "storage"))
 os.environ.setdefault("SCRIPT_PROVIDER", "groq")
 os.environ.setdefault("SCRIPT_MODEL_NAME", "fallback-script-model")
 
-import supabase
 
-
-class _DummyStorageBucket:
-    def upload(self, *args, **kwargs):
-        return {"ok": True}
-
-    def get_public_url(self, path):
-        return f"https://example.supabase.co/storage/v1/object/public/test-bucket/{path}"
-
-
-class _DummyStorage:
-    def from_(self, *args, **kwargs):
-        return _DummyStorageBucket()
-
-
-class _DummyTableQuery:
-    data = []
-
-    def insert(self, *args, **kwargs):
-        return self
-
-    def update(self, *args, **kwargs):
-        return self
-
-    def select(self, *args, **kwargs):
-        return self
-
-    def eq(self, *args, **kwargs):
-        return self
-
-    def execute(self):
-        return self
-
-
-class _DummySupabaseClient:
-    storage = _DummyStorage()
-
-    def table(self, *args, **kwargs):
-        return _DummyTableQuery()
-
-
-supabase.create_client = lambda *args, **kwargs: _DummySupabaseClient()
 
 from fastapi.testclient import TestClient
 
