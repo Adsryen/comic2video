@@ -59,10 +59,23 @@ class Asset(Base):
         ForeignKey("jobs.id"),
         nullable=True,
     )
+    job_run_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("job_runs.id"),
+        nullable=True,
+    )
+    job_step_run_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("job_step_runs.id"),
+        nullable=True,
+    )
+    step_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
     asset_type: Mapped[str] = mapped_column(String(50), nullable=False)
     storage_path: Mapped[str] = mapped_column(Text, nullable=False)
     mime_type: Mapped[str] = mapped_column(String(255), nullable=False)
     metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    is_latest: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,

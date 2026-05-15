@@ -68,11 +68,82 @@ app.add_middleware(
 )
 
 Base.metadata.create_all(bind=engine)
+
+
+def ensure_schema_compatibility():
+    inspector = inspect(engine)
+    statements = []
+    table_names = inspector.get_table_names()
+
+    if "model_providers" in table_names:
+        columns = {column["name"] for column in inspector.get_columns("model_providers")}
+        if "last_tested_at" not in columns:
+            statements.append("ALTER TABLE model_providers ADD COLUMN last_tested_at DATETIME")
+        if "auth_type" not in columns:
+            statements.append("ALTER TABLE model_providers ADD COLUMN auth_type VARCHAR(50)")
+        if "api_key" not in columns:
+            statements.append("ALTER TABLE model_providers ADD COLUMN api_key TEXT")
+
+    if "model_vendors" in table_names:
+        columns = {column["name"] for column in inspector.get_columns("model_vendors")}
+        if "last_test_status" not in columns:
+            statements.append("ALTER TABLE model_vendors ADD COLUMN last_test_status VARCHAR(20)")
+        if "last_test_message" not in columns:
+            statements.append("ALTER TABLE model_vendors ADD COLUMN last_test_message TEXT")
+        if "discovered_models_json" not in columns:
+            statements.append("ALTER TABLE model_vendors ADD COLUMN discovered_models_json TEXT")
+        if "discovered_models_at" not in columns:
+            statements.append("ALTER TABLE model_vendors ADD COLUMN discovered_models_at DATETIME")
+
+    if "model_vendors" not in table_names:
+        statements.append(
+            "CREATE TABLE model_vendors (id VARCHAR(36) PRIMARY KEY, vendor_key VARCHAR(100) NOT NULL, display_name VARCHAR(255) NOT NULL, base_url TEXT, auth_type VARCHAR(50), api_key TEXT, config_json TEXT, is_enabled BOOLEAN NOT NULL DEFAULT 1, last_tested_at DATETIME, last_test_status VARCHAR(20), last_test_message TEXT, discovered_models_json TEXT, discovered_models_at DATETIME, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)"
+        )
+
+    if "capability_model_mappings" not in table_names:
+        statements.append(
+            "CREATE TABLE capability_model_mappings (id VARCHAR(36) PRIMARY KEY, capability_type VARCHAR(50) NOT NULL, vendor_id VARCHAR(36) NOT NULL, model_name VARCHAR(255), display_name VARCHAR(255) NOT NULL, is_enabled BOOLEAN NOT NULL DEFAULT 1, is_default BOOLEAN NOT NULL DEFAULT 0, config_json TEXT, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, FOREIGN KEY(vendor_id) REFERENCES model_vendors(id))"
+        )
+
+    if "job_runs" not in table_names:
+        statements.append(
+            "CREATE TABLE job_runs (id VARCHAR(36) PRIMARY KEY, job_id VARCHAR(36) NOT NULL, run_type VARCHAR(50) NOT NULL DEFAULT 'initial', status VARCHAR(50) NOT NULL DEFAULT 'PENDING', triggered_by_user_id VARCHAR(36), source_run_id VARCHAR(36), resume_from_step_name VARCHAR(50), started_at DATETIME, finished_at DATETIME, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, FOREIGN KEY(job_id) REFERENCES jobs(id), FOREIGN KEY(triggered_by_user_id) REFERENCES users(id), FOREIGN KEY(source_run_id) REFERENCES job_runs(id))"
+        )
+
+    if "job_step_runs" not in table_names:
+        statements.append(
+            "CREATE TABLE job_step_runs (id VARCHAR(36) PRIMARY KEY, job_run_id VARCHAR(36) NOT NULL, job_id VARCHAR(36) NOT NULL, step_name VARCHAR(50) NOT NULL, attempt_no INTEGER NOT NULL DEFAULT 1, status VARCHAR(50) NOT NULL DEFAULT 'PENDING', input_json TEXT, output_json TEXT, error_message TEXT, reused_from_step_run_id VARCHAR(36), started_at DATETIME, finished_at DATETIME, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, FOREIGN KEY(job_run_id) REFERENCES job_runs(id), FOREIGN KEY(job_id) REFERENCES jobs(id), FOREIGN KEY(reused_from_step_run_id) REFERENCES job_step_runs(id))"
+        )
+
+    if "assets" in table_names:
+        columns = {column["name"] for column in inspector.get_columns("assets")}
+        if "job_run_id" not in columns:
+            statements.append("ALTER TABLE assets ADD COLUMN job_run_id VARCHAR(36)")
+        if "job_step_run_id" not in columns:
+            statements.append("ALTER TABLE assets ADD COLUMN job_step_run_id VARCHAR(36)")
+        if "step_name" not in columns:
+            statements.append("ALTER TABLE assets ADD COLUMN step_name VARCHAR(50)")
+        if "version" not in columns:
+            statements.append("ALTER TABLE assets ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+        if "is_latest" not in columns:
+            statements.append("ALTER TABLE assets ADD COLUMN is_latest BOOLEAN NOT NULL DEFAULT 1")
+
+    if not statements:
+        return
+
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
+ensure_schema_compatibility()
+
 app.include_router(projects_router)
 app.include_router(jobs_router)
 app.include_router(assets_router)
 app.include_router(system_router)
 app.include_router(admin_model_configs_router)
+app.include_router(admin_model_vendor_mappings_router)
 app.include_router(auth_router)
 app.include_router(users_router)
 
