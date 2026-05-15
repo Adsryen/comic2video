@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 from app.config import BASE_DIR
-from app.db.models import Asset, Job, JobStep, Project, Storyboard
+from app.db.models import Asset, Job, JobRun, JobStep, JobStepRun, Project, Storyboard
 from app.db.session import SessionLocal
 from app.services.audio_service import AudioService
 from app.services.model_config_service import ModelConfigService
@@ -14,6 +14,58 @@ from app.services.storyboard_service import StoryboardService
 from app.services.storage_service import StorageService
 from app.utils.openai_utils import generate_cinematic_script
 from app.workers.step_runner import StepRunner
+
+
+STEP_DEPENDENCIES = {
+    "parse": [],
+    "analyze": ["parse"],
+    "storyboard": ["parse", "analyze"],
+    "script": ["parse", "storyboard"],
+    "tts": ["script"],
+    "video": ["storyboard", "tts"],
+    "merge": ["video", "tts"],
+}
+
+
+def _step_index(step_name: str) -> int:
+    ordered_steps = ["parse", "analyze", "storyboard", "script", "tts", "video", "merge"]
+    try:
+        return ordered_steps.index(step_name)
+    except ValueError:
+        return -1
+
+
+def _is_step_reusable(step_run: JobStepRun | None) -> bool:
+    return bool(step_run and step_run.status == "COMPLETED" and step_run.output_json)
+
+
+def _find_latest_reusable_step_run(db, job_id: str, step_name: str, source_run_id: str | None = None) -> JobStepRun | None:
+    query = (
+        db.query(JobStepRun)
+        .filter(JobStepRun.job_id == job_id, JobStepRun.step_name == step_name, JobStepRun.status == "COMPLETED")
+        .order_by(JobStepRun.created_at.desc())
+    )
+    if source_run_id:
+        query = query.filter(JobStepRun.job_run_id == source_run_id)
+    return query.first()
+
+
+def _compose_reuse_context(db, job_id: str, source_run_id: str | None, resume_from_step_name: str | None) -> tuple[dict[str, dict], dict[str, str]]:
+    context: dict[str, dict] = {}
+    reused_step_run_ids: dict[str, str] = {}
+    steps = ["parse", "analyze", "storyboard", "script", "tts", "video", "merge"]
+    for step_name in steps:
+        reusable_run = _find_latest_reusable_step_run(db, job_id, step_name, source_run_id)
+        if not _is_step_reusable(reusable_run):
+            continue
+        if resume_from_step_name and _step_index(step_name) >= _step_index(resume_from_step_name):
+            continue
+        try:
+            context[step_name] = json.loads(reusable_run.output_json)
+            reused_step_run_ids[step_name] = reusable_run.id
+        except json.JSONDecodeError:
+            continue
+    return context, reused_step_run_ids
 
 
 def _storage_root() -> Path:
@@ -295,35 +347,115 @@ def _step_output(step_name: str, db, project: Project, job: Job, context: dict) 
     return {"step": step_name, "job_id": job.id, "project_id": project.id}
 
 
-def _persist_step_assets(db, step: JobStep, project: Project, job: Job, output: dict, artifact_path: str):
+def _load_latest_step_outputs(db, job_id: str) -> dict[str, dict]:
+    context: dict[str, dict] = {}
+    step_runs = (
+        db.query(JobStepRun)
+        .filter(JobStepRun.job_id == job_id, JobStepRun.status == "COMPLETED")
+        .order_by(JobStepRun.created_at.asc())
+        .all()
+    )
+    for step_run in step_runs:
+        if not step_run.output_json:
+            continue
+        try:
+            context[step_run.step_name] = json.loads(step_run.output_json)
+        except json.JSONDecodeError:
+            continue
+    return context
+
+
+def _build_step_input(step_name: str, context: dict[str, dict]) -> dict:
+    dependency_map = {
+        "parse": {},
+        "analyze": {"parse": context.get("parse")},
+        "storyboard": {"parse": context.get("parse"), "analyze": context.get("analyze")},
+        "script": {"parse": context.get("parse"), "storyboard": context.get("storyboard")},
+        "tts": {"script": context.get("script")},
+        "video": {"storyboard": context.get("storyboard"), "tts": context.get("tts")},
+        "merge": {"video": context.get("video"), "tts": context.get("tts")},
+    }
+    return dependency_map.get(step_name, {})
+
+
+def _eligible_step_names(start_from: str | None = None) -> list[str]:
+    steps = ["parse", "analyze", "storyboard", "script", "tts", "video", "merge"]
+    if not start_from:
+        return steps
+    start_index = _step_index(start_from)
+    if start_index < 0:
+        return steps
+    return steps[start_index:]
+
+
+def _next_asset_version(db, job: Job, step_name: str, asset_type: str) -> int:
+    latest_asset = (
+        db.query(Asset)
+        .filter(Asset.job_id == job.id, Asset.step_name == step_name, Asset.asset_type == asset_type)
+        .order_by(Asset.version.desc(), Asset.created_at.desc())
+        .first()
+    )
+    return (latest_asset.version + 1) if latest_asset else 1
+
+
+def _create_versioned_asset(
+    db,
+    project: Project,
+    job: Job,
+    job_run: JobRun,
+    step_run: JobStepRun,
+    step_name: str,
+    asset_type: str,
+    storage_path: str,
+    mime_type: str,
+    metadata: dict | None = None,
+):
+    db.query(Asset).filter(
+        Asset.job_id == job.id,
+        Asset.step_name == step_name,
+        Asset.asset_type == asset_type,
+        Asset.is_latest.is_(True),
+    ).update({Asset.is_latest: False}, synchronize_session=False)
+
+    asset = Asset(
+        project_id=project.id,
+        job_id=job.id,
+        job_run_id=job_run.id,
+        job_step_run_id=step_run.id,
+        step_name=step_name,
+        asset_type=asset_type,
+        storage_path=storage_path,
+        mime_type=mime_type,
+        metadata_json=json.dumps(metadata, ensure_ascii=False) if metadata is not None else None,
+        version=_next_asset_version(db, job, step_name, asset_type),
+        is_latest=True,
+    )
+    db.add(asset)
+    return asset
+
+
+def _persist_step_assets(db, step: JobStep, step_run: JobStepRun, job_run: JobRun, project: Project, job: Job, output: dict, artifact_path: str):
     if step.step_name == "parse":
         for panel in output.get("panel_items", []):
-            db.add(
-                Asset(
-                    project_id=project.id,
-                    job_id=job.id,
-                    asset_type="panel_image",
-                    storage_path=panel["storage_path"],
-                    mime_type=panel.get("mime_type", "image/jpeg"),
-                    metadata_json=json.dumps(
-                        {
-                            "panel_id": panel["panel_id"],
-                            "page_index": panel["page_index"],
-                            "panel_index": panel["panel_index"],
-                        }
-                    ),
-                )
+            _create_versioned_asset(
+                db,
+                project,
+                job,
+                job_run,
+                step_run,
+                step.step_name,
+                "panel_image",
+                panel["storage_path"],
+                panel.get("mime_type", "image/jpeg"),
+                {
+                    "panel_id": panel["panel_id"],
+                    "page_index": panel["page_index"],
+                    "panel_index": panel["panel_index"],
+                },
             )
 
-        db.add(
-            Asset(
-                project_id=project.id,
-                job_id=job.id,
-                asset_type="parse_artifact",
-                storage_path=artifact_path,
-                mime_type="application/json",
-                metadata_json=json.dumps({"step": step.step_name}),
-            )
+        _create_versioned_asset(
+            db, project, job, job_run, step_run, step.step_name, "parse_artifact", artifact_path, "application/json", {"step": step.step_name}
         )
         db.commit()
         return
@@ -338,15 +470,8 @@ def _persist_step_assets(db, step: JobStep, project: Project, job: Job, output: 
                 content_json=json.dumps(storyboard_payload),
             )
         )
-        db.add(
-            Asset(
-                project_id=project.id,
-                job_id=job.id,
-                asset_type="storyboard",
-                storage_path=artifact_path,
-                mime_type="application/json",
-                metadata_json=json.dumps({"step": step.step_name}),
-            )
+        _create_versioned_asset(
+            db, project, job, job_run, step_run, step.step_name, "storyboard", artifact_path, "application/json", {"step": step.step_name}
         )
         db.commit()
         return
@@ -360,86 +485,37 @@ def _persist_step_assets(db, step: JobStep, project: Project, job: Job, output: 
                 audio_storage_path = f"jobs/{job.id}/audio/narration.wav"
                 _storage_service().put_bytes(audio_storage_path, audio_file.read_bytes(), "audio/wav")
                 output["audio_storage_path"] = audio_storage_path
-        db.add(
-            Asset(
-                project_id=project.id,
-                job_id=job.id,
-                asset_type="narration_audio",
-                storage_path=output.get("audio_storage_path", output["audio_path"]),
-                mime_type="audio/wav",
-                metadata_json=json.dumps(output),
-            )
+        _create_versioned_asset(
+            db, project, job, job_run, step_run, step.step_name, "narration_audio", output.get("audio_storage_path", output["audio_path"]), "audio/wav", output
         )
-        db.add(
-            Asset(
-                project_id=project.id,
-                job_id=job.id,
-                asset_type="tts_artifact",
-                storage_path=artifact_path,
-                mime_type="application/json",
-                metadata_json=json.dumps({"step": step.step_name}),
-            )
+        _create_versioned_asset(
+            db, project, job, job_run, step_run, step.step_name, "tts_artifact", artifact_path, "application/json", {"step": step.step_name}
         )
         db.commit()
         return
 
     if step.step_name == "video":
-        db.add(
-            Asset(
-                project_id=project.id,
-                job_id=job.id,
-                asset_type="video_artifact",
-                storage_path=output.get("video_storage_path", output["video_path"]),
-                mime_type="video/mp4",
-                metadata_json=json.dumps(output),
-            )
+        _create_versioned_asset(
+            db, project, job, job_run, step_run, step.step_name, "video_artifact", output.get("video_storage_path", output["video_path"]), "video/mp4", output
         )
-        db.add(
-            Asset(
-                project_id=project.id,
-                job_id=job.id,
-                asset_type="video_artifact_meta",
-                storage_path=artifact_path,
-                mime_type="application/json",
-                metadata_json=json.dumps({"step": step.step_name}),
-            )
+        _create_versioned_asset(
+            db, project, job, job_run, step_run, step.step_name, "video_artifact_meta", artifact_path, "application/json", {"step": step.step_name}
         )
         db.commit()
         return
 
     if step.step_name == "merge":
-        db.add(
-            Asset(
-                project_id=project.id,
-                job_id=job.id,
-                asset_type="final_video",
-                storage_path=output.get("video_storage_path", output["video_url"]),
-                mime_type="video/mp4",
-                metadata_json=json.dumps(output),
-            )
+        _create_versioned_asset(
+            db, project, job, job_run, step_run, step.step_name, "final_video", output.get("video_storage_path", output["video_url"]), "video/mp4", output
         )
-        db.add(
-            Asset(
-                project_id=project.id,
-                job_id=job.id,
-                asset_type="merge_artifact",
-                storage_path=artifact_path,
-                mime_type="application/json",
-                metadata_json=json.dumps({"step": step.step_name}),
-            )
+        _create_versioned_asset(
+            db, project, job, job_run, step_run, step.step_name, "merge_artifact", artifact_path, "application/json", {"step": step.step_name}
         )
         db.commit()
         return
 
-    db.add(
-        Asset(
-            project_id=project.id,
-            job_id=job.id,
-            asset_type=f"{step.step_name}_artifact",
-            storage_path=artifact_path,
-            mime_type="application/json",
-            metadata_json=json.dumps(output),
-        )
+    _create_versioned_asset(
+        db, project, job, job_run, step_run, step.step_name, f"{step.step_name}_artifact", artifact_path, "application/json", output
     )
     db.commit()
 
@@ -447,27 +523,78 @@ def _persist_step_assets(db, step: JobStep, project: Project, job: Job, output: 
 def run_job_pipeline(job_id: str):
     db = SessionLocal()
     try:
-        job = db.query(Job).filter(Job.id == job_id).first()
+        latest_run = (
+            db.query(JobRun)
+            .filter(JobRun.job_id == job_id)
+            .order_by(JobRun.created_at.desc())
+            .first()
+        )
+        if latest_run:
+            return run_job_run(latest_run.id)
+        return {"status": "missing_run", "job_id": job_id}
+    finally:
+        db.close()
+
+
+def run_job_run(job_run_id: str):
+    db = SessionLocal()
+    try:
+        job_run = db.query(JobRun).filter(JobRun.id == job_run_id).first()
+        if not job_run:
+            return {"status": "missing_run", "job_run_id": job_run_id}
+
+        job = db.query(Job).filter(Job.id == job_run.job_id).first()
         if not job:
-            return {"status": "missing", "job_id": job_id}
+            return {"status": "missing", "job_run_id": job_run_id}
 
         project = db.query(Project).filter(Project.id == job.project_id).first()
         if not project:
-            return {"status": "missing_project", "job_id": job_id}
+            return {"status": "missing_project", "job_run_id": job_run_id}
 
         job.status = "RUNNING"
         job.started_at = datetime.utcnow()
+        StepRunner.mark_run_running(db, job_run)
         db.commit()
 
-        steps = db.query(JobStep).filter(JobStep.job_id == job_id).all()
-        total_steps = len(steps) or 1
-        context: dict[str, dict] = {}
+        steps = db.query(JobStep).filter(JobStep.job_id == job.id).all()
+        step_runs = db.query(JobStepRun).filter(JobStepRun.job_run_id == job_run_id).all()
+        step_run_map = {step_run.step_name: step_run for step_run in step_runs}
+        total_steps = len(step_runs) or len(steps) or 1
+        context, reused_step_run_ids = _compose_reuse_context(db, job.id, job_run.source_run_id, job_run.resume_from_step_name)
+        start_step_name = job_run.resume_from_step_name
+        eligible_steps = _eligible_step_names(start_step_name)
 
         for index, step in enumerate(steps, start=1):
-            if step.status != "PENDING":
+            if step.step_name not in eligible_steps:
                 continue
 
+            step_run = step_run_map.get(step.step_name)
+            if not step_run or step_run.status != "PENDING":
+                continue
+
+            reused_step_run_id = reused_step_run_ids.get(step.step_name)
+            if reused_step_run_id:
+                step_run.status = "COMPLETED"
+                step_run.reused_from_step_run_id = reused_step_run_id
+                step_run.input_json = json.dumps(_build_step_input(step.step_name, context), ensure_ascii=False) or None
+                step_run.output_json = context.get(step.step_name) and json.dumps(context[step.step_name], ensure_ascii=False)
+                if step_run.started_at is None:
+                    step_run.started_at = datetime.utcnow()
+                step_run.finished_at = datetime.utcnow()
+                step_run.updated_at = datetime.utcnow()
+                step.status = "COMPLETED"
+                step.output_json = step_run.output_json
+                step.started_at = step_run.started_at
+                step.finished_at = step_run.finished_at
+                db.commit()
+                continue
+
+            step_input = _build_step_input(step.step_name, context)
+            step_run.input_json = json.dumps(step_input, ensure_ascii=False) if step_input else None
+            db.commit()
+
             StepRunner.mark_running(db, step)
+            StepRunner.mark_run_step_running(db, step_run)
             output = _step_output(step.step_name, db, project, job, context)
             context[step.step_name] = output
 
@@ -476,15 +603,27 @@ def run_job_pipeline(job_id: str):
                 output,
             )
 
-            _persist_step_assets(db, step, project, job, output, artifact_path)
+            _persist_step_assets(db, step, step_run, job_run, project, job, output, artifact_path)
             StepRunner.mark_completed(db, step, json.dumps(output))
+            StepRunner.mark_run_step_completed(db, step_run, json.dumps(output))
             job.progress = int(index / total_steps * 100)
             db.commit()
 
         job.status = "COMPLETED"
         job.progress = 100
         job.finished_at = datetime.utcnow()
+        StepRunner.mark_run_completed(db, job_run)
         db.commit()
-        return {"status": "ok", "job_id": job_id}
+        return {"status": "ok", "job_id": job.id, "job_run_id": job_run_id}
+    except Exception as exc:
+        if 'job' in locals() and job:
+            job.status = "FAILED"
+            job.error_message = str(exc)
+        if 'step_run' in locals() and step_run:
+            StepRunner.mark_run_step_failed(db, step_run, str(exc))
+        if 'job_run' in locals() and job_run:
+            StepRunner.mark_run_failed(db, job_run, str(exc))
+        db.commit()
+        raise
     finally:
         db.close()
