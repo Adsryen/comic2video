@@ -1,51 +1,66 @@
-# OCR Provider Example: PaddleOCR
-
-这个文件用于记录一个 OCR provider 示例的启动方式和最小部署说明。
+# PaddleOCR 接入说明
 
 ## 适用场景
 
-- 漫画页 OCR
-- 气泡文本抽取
-- 作为 `ocr` 能力下的一个可选 provider
+当 Comic2Video 需要对漫画页面、气泡文本、页面说明文字进行检测与识别时，可以使用 PaddleOCR 作为 OCR 能力候选实现。
 
-## 启动前准备
+## 在本项目中的职责
 
-1. 复制根目录模板：
+OCR 层建议负责：
 
-```bash
-cp models/.env.example models/.env
+- 页面图像或分镜图像的文字检测
+- 文字框定位与顺序组织
+- 文本识别结果输出
+- 为后续脚本生成、镜头摘要、字幕草稿提供结构化输入
+
+## 推荐输出结构
+
+无论底层是否直接使用 PaddleOCR，建议在 Comic2Video 内部统一成类似结构：
+
+```json
+{
+  "page": 1,
+  "blocks": [
+    {
+      "bbox": [0, 0, 100, 40],
+      "text": "示例文本",
+      "score": 0.98,
+      "role": "dialogue"
+    }
+  ]
+}
 ```
 
-2. 按实际环境修改：
+其中：
 
-- `OCR_IMAGE`
-- `OCR_PORT`
-- `OCR_MODEL_DIR`
+- `bbox`：文本区域坐标
+- `text`：识别文本
+- `score`：置信度
+- `role`：可选字段，用于后续区分对话、旁白、拟声词等
 
-## 启动
+## 接入建议
 
-```bash
-docker compose --env-file models/.env -f compose/model-services/ocr/paddleocr.compose.yml up -d
-```
+- 先在 OCR provider 层封装统一调用接口
+- 不要让业务工作流直接依赖 PaddleOCR 的原始返回格式
+- 保留页面级与分镜级两种调用方式，便于不同阶段复用
 
-## 约定
+## 运行建议
 
-- 默认把 OCR 服务端口暴露为 `8118`
-- 默认把模型目录挂载到容器内 `/models/ocr`
-- 镜像和启动命令不写死，方便适配你自己的 GPU / 定制镜像环境
+PaddleOCR 可以作为：
 
-## 待确认
+- 本机开发时的直接依赖
+- 独立 OCR 服务容器
+- 内网模型服务的一部分
 
-真正接入前需要确认：
+如果后续在 `compose/model-services/ocr/` 中增加服务编排，应保证文档与 compose 配置保持一致。
 
-- 镜像里是否已经封装 HTTP API
-- 健康检查地址是什么
-- 单图推理接口字段是什么
-- 是否支持批量图片 OCR
+## 关注点
 
-## 接入平台建议
+- 漫画文本区域可能存在竖排、异形气泡、拟声词干扰
+- OCR 结果不应只返回纯文本，最好保留位置与顺序信息
+- 上层工作流需要容忍 OCR 置信度不稳定的问题
 
-```env
-OCR_PROVIDER=paddleocr
-OCR_API_BASE=http://your-host:8118
-```
+## 文档边界
+
+本文档只说明 PaddleOCR 在 Comic2Video 中的接入角色，不追求覆盖 PaddleOCR 的全部官方参数说明。
+
