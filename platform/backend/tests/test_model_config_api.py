@@ -103,6 +103,11 @@ def test_test_provider_returns_metadata_only_success_without_base_url():
     payload = response.json()
     assert payload["ok"] is True
     assert payload["provider_id"] == provider["id"]
+    assert payload["last_tested_at"] is not None
+
+    providers = client.get("/api/v1/admin/model-providers").json()
+    updated = next(item for item in providers if item["id"] == provider["id"])
+    assert updated["last_tested_at"] is not None
 
 
 def test_system_settings_endpoint_returns_list_shape():

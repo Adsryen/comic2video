@@ -3,6 +3,7 @@ import random
 import asyncio
 from fastapi import FastAPI, Form, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect, text
 from app.config import FRONTEND_BASE_URL
 from app.utils.ffmpeg_runtime import configure_pydub
 try:
