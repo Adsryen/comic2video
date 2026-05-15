@@ -42,7 +42,7 @@ export default function ProjectUploadForm({ onCreated }) {
           value={name}
           onChange={(event) => setName(event.target.value)}
           placeholder={t.projectNamePlaceholder}
-          className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition focus:border-purple-400/60 focus:bg-white/[0.08]"
+          className="w-full rounded-xl border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.07),rgba(255,255,255,0.03))] px-4 py-3 text-white outline-none transition hover:border-white/20 focus:border-purple-400/60 focus:bg-white/[0.09]"
         />
       </label>
 
@@ -52,7 +52,7 @@ export default function ProjectUploadForm({ onCreated }) {
           type="file"
           accept=".pdf,.cbz,application/pdf,application/x-cbz,application/vnd.comicbook+zip"
           onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-          className="w-full rounded-xl border border-dashed border-white/15 bg-white/5 px-4 py-3 text-sm text-white/70 file:mr-4 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:text-sm file:font-medium file:text-black"
+          className="w-full rounded-xl border border-dashed border-white/15 bg-[linear-gradient(180deg,rgba(255,255,255,0.07),rgba(255,255,255,0.03))] px-4 py-3 text-sm text-white/70 file:mr-4 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:text-sm file:font-medium file:text-black"
         />
       </label>
 

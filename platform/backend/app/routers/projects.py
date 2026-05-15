@@ -1,6 +1,6 @@
 import os
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.auth import require_current_user
@@ -45,10 +45,20 @@ async def create_project(
 
 @router.get("", response_model=list[ProjectResponse])
 def list_projects(current_user: dict = Depends(require_current_user), db: Session = Depends(get_db)):
-    projects = ProjectService.list_all(db)
+    projects = ProjectService.list_non_empty(db)
     if current_user.get("auth_bypassed") or current_user.get("local_user_role") == "admin":
         return projects
     return [project for project in projects if project.created_by_user_id == current_user.get("local_user_id")]
+
+
+@router.delete("/empty", status_code=204)
+def delete_empty_projects(current_user: dict = Depends(require_current_user), db: Session = Depends(get_db)):
+    if current_user.get("auth_bypassed") or current_user.get("local_user_role") == "admin":
+        ProjectService.delete_empty_projects(db)
+        return Response(status_code=204)
+
+    ProjectService.delete_empty_projects(db, created_by_user_id=current_user.get("local_user_id"))
+    return Response(status_code=204)
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)

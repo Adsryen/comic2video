@@ -14,9 +14,9 @@ export default function ProjectList({ projects }) {
         <Link
           key={project.id}
           to={`/projects/${project.id}`}
-          className="rounded-2xl border border-white/10 bg-black/20 p-5 text-white transition hover:-translate-y-0.5 hover:bg-black/30 hover:shadow-[0_16px_40px_rgba(0,0,0,0.22)]"
+          className="rounded-[1.5rem] border border-white/10 bg-black/20 p-5 text-white transition hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.05] hover:shadow-[0_16px_40px_rgba(0,0,0,0.22)]"
         >
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="text-lg font-semibold">{project.name}</div>
               <div className="mt-1 text-sm text-white/55">{project.source_type.toUpperCase()} {t.sourceSuffix}</div>

@@ -43,3 +43,12 @@ export const listProjectJobs = async (projectId) => {
   const response = await api.get(`/api/v1/projects/${projectId}/jobs`);
   return response.data;
 };
+
+export const deleteEmptyProjects = async () => {
+  if (isDemoMode) {
+    return { deleted: 0 };
+  }
+
+  const response = await api.delete('/api/v1/projects/empty');
+  return response.data;
+};

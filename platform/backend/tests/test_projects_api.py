@@ -3,6 +3,7 @@ import tempfile
 import uuid
 
 import pytest
+from fastapi.testclient import TestClient
 
 os.environ.setdefault("RABBITMQ_URL", "memory://")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
@@ -13,10 +14,9 @@ _temp_dir = tempfile.mkdtemp(prefix="platform_projects_")
 os.environ.setdefault("DATABASE_URL", f"sqlite:///{os.path.join(_temp_dir, 'test.db')}")
 os.environ.setdefault("STORAGE_ROOT", os.path.join(_temp_dir, "storage"))
 
-
-
-from fastapi.testclient import TestClient
 from app.main import app
+from app.db.models import Project
+from app.db.session import SessionLocal
 
 client = TestClient(app)
 
@@ -71,6 +71,49 @@ def test_list_projects_returns_created_project():
     assert any(project["name"] == project_name for project in payload)
 
 
+def test_list_projects_hides_empty_projects_without_assets():
+    unique_name = f"Empty-{uuid.uuid4()}"
+    session = SessionLocal()
+    try:
+        session.add(Project(name=unique_name, source_type="pdf", status="UPLOADED"))
+        session.commit()
+    finally:
+        session.close()
+
+    list_response = client.get("/api/v1/projects")
+    assert list_response.status_code == 200
+    payload = list_response.json()
+    assert all(project["name"] != unique_name for project in payload)
+
+
+def test_delete_empty_projects_removes_orphans():
+    empty_name = f"Orphan-{uuid.uuid4()}"
+    kept_name = f"Kept-{uuid.uuid4()}"
+
+    session = SessionLocal()
+    try:
+        session.add(Project(name=empty_name, source_type="pdf", status="UPLOADED"))
+        session.commit()
+    finally:
+        session.close()
+
+    create_response = client.post(
+        "/api/v1/projects",
+        data={"name": kept_name},
+        files={"source_file": ("chapter01.pdf", b"fake-pdf", "application/pdf")},
+    )
+    assert create_response.status_code == 201
+
+    delete_response = client.delete("/api/v1/projects/empty")
+    assert delete_response.status_code == 204
+
+    list_response = client.get("/api/v1/projects")
+    payload = list_response.json()
+    names = [project["name"] for project in payload]
+    assert empty_name not in names
+    assert kept_name in names
+
+
 def test_get_project_returns_created_project():
     create_response = client.post(
         "/api/v1/projects",
@@ -101,6 +144,7 @@ def test_get_project_assets_returns_source_file_asset():
     payload = response.json()
     assert len(payload) >= 1
     assert payload[0]["asset_type"] == "source_file"
+
 
 def test_create_project_stores_object_key_not_absolute_path():
     response = client.post(
