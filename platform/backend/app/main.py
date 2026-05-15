@@ -19,6 +19,7 @@ from app.routers.jobs import router as jobs_router
 from app.routers.assets import router as assets_router
 from app.routers.system import router as system_router
 from app.routers.admin_model_configs import router as admin_model_configs_router
+from app.routers.admin_model_vendor_mappings import router as admin_model_vendor_mappings_router
 from app.routers.auth import router as auth_router
 from app.routers.users import router as users_router
 from app.services.bootstrap_service import BootstrapService
