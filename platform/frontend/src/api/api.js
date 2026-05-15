@@ -6,6 +6,22 @@ const ACCESS_TOKEN_KEY = 'platform_access_token';
 
 const detectDefaultApiBaseUrl = () => {
   if (explicitApiBaseUrl) {
+    if (typeof window !== 'undefined') {
+      try {
+        const configuredUrl = new URL(explicitApiBaseUrl, window.location.origin);
+        const currentHost = window.location.hostname;
+        const configuredHost = configuredUrl.hostname;
+        const isLoopbackHost = ['localhost', '127.0.0.1', '0.0.0.0'].includes(configuredHost);
+        const usingLanHost = currentHost && !['localhost', '127.0.0.1', '0.0.0.0'].includes(currentHost);
+
+        if (isLoopbackHost && usingLanHost) {
+          configuredUrl.hostname = currentHost;
+          return configuredUrl.toString().replace(/\/$/, '');
+        }
+      } catch {
+        return explicitApiBaseUrl;
+      }
+    }
     return explicitApiBaseUrl;
   }
 

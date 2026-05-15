@@ -38,12 +38,25 @@ allowed_origins = [
     "http://0.0.0.0:5173",
 ]
 
+extra_frontend_origins = os.getenv("FRONTEND_EXTRA_ORIGINS", "")
+if extra_frontend_origins:
+    allowed_origins.extend([origin.strip() for origin in extra_frontend_origins.split(",") if origin.strip()])
+
 if FRONTEND_BASE_URL and "://" in FRONTEND_BASE_URL:
     scheme, host = FRONTEND_BASE_URL.split("://", 1)
     if host.startswith("localhost:"):
         allowed_origins.append(f"{scheme}://127.0.0.1:{host.split(':', 1)[1]}")
     elif host.startswith("127.0.0.1:"):
         allowed_origins.append(f"{scheme}://localhost:{host.split(':', 1)[1]}")
+    elif ":" in host:
+        port = host.split(":", 1)[1]
+        bare_host = host.split(":", 1)[0]
+        allowed_origins.extend([
+            f"{scheme}://localhost:{port}",
+            f"{scheme}://127.0.0.1:{port}",
+            f"{scheme}://0.0.0.0:{port}",
+            f"{scheme}://{bare_host}:{port}",
+        ])
 
 app.add_middleware(
     CORSMiddleware,

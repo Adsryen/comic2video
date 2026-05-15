@@ -11,6 +11,12 @@ BACKEND_ENV_FILE="$BACKEND_DIR/.env"
 FRONTEND_ENV_FILE="$FRONTEND_DIR/.env.local"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
+PLATFORM_HOST="${PLATFORM_HOST:-localhost}"
+BACKEND_BIND_HOST="${BACKEND_BIND_HOST:-0.0.0.0}"
+FRONTEND_BIND_HOST="${FRONTEND_BIND_HOST:-0.0.0.0}"
+FRONTEND_BASE_URL="${FRONTEND_BASE_URL:-}"
+API_BASE_URL="${API_BASE_URL:-}"
+GOOGLE_REDIRECT_URI_OVERRIDE="${GOOGLE_REDIRECT_URI_OVERRIDE:-}"
 CELERY_CONCURRENCY="${CELERY_CONCURRENCY:-1}"
 BACKEND_AUTH_ENABLED="${BACKEND_AUTH_ENABLED:-false}"
 BOOTSTRAP_ADMIN_EMAILS="${BOOTSTRAP_ADMIN_EMAILS:-admin@local}"
@@ -34,6 +40,75 @@ log() {
 fail() {
   echo "ERROR: $*" >&2
   exit 1
+}
+
+usage() {
+  cat <<EOF
+Usage: bash start-platform.sh [options]
+
+Options:
+  --host <host>                    Public host/IP for browser access, e.g. 172.23.77.80
+  --backend-port <port>            Backend port, default: 8000
+  --frontend-port <port>           Frontend port, default: 5173
+  --backend-bind-host <host>       Backend bind host, default: 0.0.0.0
+  --frontend-bind-host <host>      Frontend bind host, default: 0.0.0.0
+  --frontend-base-url <url>        Frontend public URL override
+  --api-base-url <url>             Frontend API base URL override
+  --google-redirect-uri <url>      Backend Google redirect URI override
+  -h, --help                       Show this help
+EOF
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --host)
+        PLATFORM_HOST="$2"
+        shift 2
+        ;;
+      --backend-port)
+        BACKEND_PORT="$2"
+        shift 2
+        ;;
+      --frontend-port)
+        FRONTEND_PORT="$2"
+        shift 2
+        ;;
+      --backend-bind-host)
+        BACKEND_BIND_HOST="$2"
+        shift 2
+        ;;
+      --frontend-bind-host)
+        FRONTEND_BIND_HOST="$2"
+        shift 2
+        ;;
+      --frontend-base-url)
+        FRONTEND_BASE_URL="$2"
+        shift 2
+        ;;
+      --api-base-url)
+        API_BASE_URL="$2"
+        shift 2
+        ;;
+      --google-redirect-uri)
+        GOOGLE_REDIRECT_URI_OVERRIDE="$2"
+        shift 2
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        fail "Unknown option: $1"
+        ;;
+    esac
+  done
+}
+
+ensure_runtime_urls() {
+  FRONTEND_BASE_URL="${FRONTEND_BASE_URL:-http://${PLATFORM_HOST}:${FRONTEND_PORT}}"
+  API_BASE_URL="${API_BASE_URL:-http://${PLATFORM_HOST}:${BACKEND_PORT}}"
+  GOOGLE_REDIRECT_URI_OVERRIDE="${GOOGLE_REDIRECT_URI_OVERRIDE:-${API_BASE_URL}/api/v1/auth/google/callback}"
 }
 
 require_dir() {
@@ -120,7 +195,7 @@ ensure_frontend_env() {
   if [[ ! -f "$FRONTEND_ENV_FILE" ]]; then
     log "Creating $FRONTEND_ENV_FILE"
     cat > "$FRONTEND_ENV_FILE" <<EOF
-VITE_API_BASE_URL=http://localhost:$BACKEND_PORT
+VITE_API_BASE_URL=$API_BASE_URL
 VITE_DEMO_MODE=false
 EOF
   fi
@@ -128,9 +203,17 @@ EOF
   frontend_api_base_url="$(read_env_value "$FRONTEND_ENV_FILE" "VITE_API_BASE_URL" || true)"
 
   if is_placeholder_value "$frontend_api_base_url"; then
-    upsert_env_value "$FRONTEND_ENV_FILE" "VITE_API_BASE_URL" "http://localhost:$BACKEND_PORT"
-    log "Set default VITE_API_BASE_URL=http://localhost:$BACKEND_PORT"
+    upsert_env_value "$FRONTEND_ENV_FILE" "VITE_API_BASE_URL" "$API_BASE_URL"
+    log "Set default VITE_API_BASE_URL=$API_BASE_URL"
   fi
+
+  upsert_env_value "$FRONTEND_ENV_FILE" "VITE_API_BASE_URL" "$API_BASE_URL"
+}
+
+ensure_backend_env_urls() {
+  [[ -f "$BACKEND_ENV_FILE" ]] || return 0
+  upsert_env_value "$BACKEND_ENV_FILE" "FRONTEND_BASE_URL" "$FRONTEND_BASE_URL"
+  upsert_env_value "$BACKEND_ENV_FILE" "GOOGLE_REDIRECT_URI" "$GOOGLE_REDIRECT_URI_OVERRIDE"
 }
 
 ensure_docker_compose() {
@@ -254,20 +337,20 @@ start_services() {
     export MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-comic2video_minio}"
     export MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-comic2video_minio_secret}"
     export MINIO_BUCKET="${MINIO_BUCKET:-comic2video}"
-    uvicorn app.main:app --host 0.0.0.0 --port "$BACKEND_PORT" --reload
+    uvicorn app.main:app --host "$BACKEND_BIND_HOST" --port "$BACKEND_PORT" --reload
   ) >"$BACKEND_LOG_DIR/uvicorn.log" 2>&1 &
   UVICORN_PID=$!
 
   log "Starting Vite frontend on port $FRONTEND_PORT"
   (
     cd "$FRONTEND_DIR"
-    npm run dev -- --host 0.0.0.0 --port "$FRONTEND_PORT"
+    npm run dev -- --host "$FRONTEND_BIND_HOST" --port "$FRONTEND_PORT"
   ) >"$FRONTEND_LOG_DIR/vite.log" 2>&1 &
   FRONTEND_PID=$!
 
   log "Platform started"
-  echo "Frontend: http://localhost:$FRONTEND_PORT"
-  echo "Backend : http://localhost:$BACKEND_PORT"
+  echo "Frontend: $FRONTEND_BASE_URL"
+  echo "Backend : $API_BASE_URL"
   echo "Logs    : $BACKEND_LOG_DIR and $FRONTEND_LOG_DIR"
   echo "Press Ctrl+C to stop all services"
 
@@ -284,11 +367,14 @@ start_services() {
 }
 
 main() {
+  parse_args "$@"
+  ensure_runtime_urls
   require_dir "$BACKEND_DIR"
   require_dir "$FRONTEND_DIR"
   ensure_supported_shell_os
   ensure_ready
   ensure_frontend_env
+  ensure_backend_env_urls
   start_local_infra
   trap cleanup INT TERM EXIT
   start_services
